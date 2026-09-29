@@ -32,7 +32,9 @@ jobs:
           $b64 = (Get-Content tools/ptbr-pack.b64 -Raw).Trim()
           [IO.File]::WriteAllBytes("ptbr-pack.zip", [Convert]::FromBase64String($b64))
           Expand-Archive ptbr-pack.zip -DestinationPath ptbr-pack -Force
-          python ptbr-pack/install_ptbr.py .
+          $installer = Get-ChildItem ptbr-pack -Recurse -Filter install_ptbr.py | Select-Object -First 1
+          if (-not $installer) { throw "install_ptbr.py not found after extraction" }
+          python $installer.FullName .
           Select-String -Path crates/omsi-app/locales/app.yml -Pattern 'pt-BR:' | Select-Object -First 5
           Select-String -Path crates/omsi-app/src/tutorial.rs -Pattern 'ptbr_translate'
 
