@@ -93,6 +93,7 @@ pub(crate) fn ui_language(code: &str) {
         "RUS" => "ru",
         "DEU" => "de",
         "FRA" => "fr",
+        "PTB" => "pt-BR",
         _ => "",
     });
 }
