@@ -29,10 +29,14 @@ pub fn set_lookup(f: Lookup) {
     }
 }
 
-/// The language to show (`ru`, `de`, `fr`; empty or `en` for English).
+/// The language to show (`ru`, `de`, `fr`, `pt-BR`; empty or `en` for English).
+///
+/// Preserve the locale's BCP-47 casing. Translation tables may contain region-qualified
+/// locales such as `pt-BR`; forcing them to lowercase would turn that into `pt-br`
+/// and make an otherwise valid translation miss and fall back to English.
 pub fn set_language(code: &str) {
     if let Ok(mut s) = STATE.write() {
-        s.1 = if code.eq_ignore_ascii_case("en") { String::new() } else { code.to_ascii_lowercase() };
+        s.1 = if code.eq_ignore_ascii_case("en") { String::new() } else { code.to_string() };
     }
 }
 
@@ -53,5 +57,19 @@ pub fn tr(text: &str) -> Cow<'_, str> {
             },
         },
         _ => Cow::Borrowed(text),
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preserves_region_qualified_locale() {
+        set_language("pt-BR");
+        assert_eq!(language(), "pt-BR");
+        set_language("en");
+        assert_eq!(language(), "");
     }
 }
