@@ -31,7 +31,9 @@ jobs:
         run: |
           $b64 = (Get-Content tools/ptbr-pack.b64 -Raw).Trim()
           [IO.File]::WriteAllBytes("ptbr-pack.zip", [Convert]::FromBase64String($b64))
-          Expand-Archive ptbr-pack.zip -DestinationPath ptbr-pack -Force
+          New-Item -ItemType Directory -Force ptbr-pack | Out-Null
+          python -m zipfile -e ptbr-pack.zip ptbr-pack
+          Get-ChildItem ptbr-pack -Recurse
           $installer = Get-ChildItem ptbr-pack -Recurse -Filter install_ptbr.py | Select-Object -First 1
           if (-not $installer) { throw "install_ptbr.py not found after extraction" }
           python $installer.FullName .
