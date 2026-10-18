@@ -353,8 +353,24 @@ omsi.on("start", function()
   omsi.log(company_name .. " iniciada; host=" .. tostring(is_host))
 end)
 
+local dispatch_elapsed = 0
 omsi.every(5, function()
   if roster_visible then render_roster() end
+  if not is_host or not omsi.lan.active() then return end
+  dispatch_elapsed = dispatch_elapsed + 5
+  for dispatch_id, pending in pairs(pending_dispatches) do
+    pending.wait_seconds = (tonumber(pending.wait_seconds) or 0) + 5
+    local received = (tonumber(pending.accepted) or 0) + (tonumber(pending.refused) or 0)
+    if received >= (tonumber(pending.expected) or 0) then
+      pending_dispatches[dispatch_id] = nil
+      persist()
+    elseif pending.wait_seconds >= 60 then
+      local missing = math.max(0, (tonumber(pending.expected) or 0) - received)
+      toast("Despacho " .. tostring(pending.line) .. "/" .. tostring(pending.tour) .. ": tempo esgotado; " .. tostring(pending.accepted or 0) .. " aceito(s), " .. tostring(pending.refused or 0) .. " recusado(s), " .. tostring(missing) .. " sem resposta.", 9)
+      pending_dispatches[dispatch_id] = nil
+      persist()
+    end
+  end
 end)
 
 local function dispatch_default_duty()
@@ -391,7 +407,7 @@ local function dispatch_default_duty()
       toast("Nenhum outro motorista conectado; a escala ficou apenas no host.", 6)
       return
     end
-    pending_dispatches[dispatch_id] = { line = line, tour = tour, expected = #players, accepted = 0, refused = 0, created = tonumber(info.clock) or 0 }
+    pending_dispatches[dispatch_id] = { line = line, tour = tour, expected = #players, accepted = 0, refused = 0, created = tonumber(info.clock) or 0, wait_seconds = 0, results = {} }
     persist()
     local command = { v = 1, k = "dispatch", d = dispatch_id, l = line, t = tour }
     local payload = omsi.json.encode(command)
