@@ -30,6 +30,7 @@ Não substitua arquivos do jogo nem instale dentro de `crates/`.
 - **OMSI-Compatible-Runtime:** detecção por capacidade, compatibilidade em camadas e diagnóstico explícito por recurso, sem presumir que uma API existe em todas as versões.
 - **OMSI-NavBR-Multiplayer:** painel de operação no jogo, botões para motoristas/despacho/status/salvamento/configurações e atalhos editáveis nas configurações nativas do plugin. Os atalhos padrão usam F4–F7; a rotina consulta os bindings expostos pelo jogo quando a API existe e evita registrar um conflito exato. Isso não garante detectar todos os mods externos.
 - **Agente de Operações:** regras locais configuráveis para segurança, pontualidade, pontuação, promoções e despacho. O núcleo não depende de IA externa nem de serviço pago.
+- **DriverOps (Lua):** incorporado à própria Empresa Virtual, sem executável ou módulo C#. `F9` mostra veículo (quando a API disponibiliza), mapa, linha, viagem, atraso/adiantamento, próxima parada, velocidade, limite de velocidade e passageiros; `F10` mostra o status rápido. Também há o botão `DriverOps` no painel. Dados ausentes são indicados como indisponíveis, sem fabricar valores.
 
 ## Diagnóstico
 - `modo=solo-offline`: carreira local habilitada; multiplayer não confirmado pela API.
