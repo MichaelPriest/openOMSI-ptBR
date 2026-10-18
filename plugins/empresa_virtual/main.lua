@@ -53,6 +53,7 @@ local function record(kind, fields)
     n = tostring(fields.stop or ""):sub(1, 18),
     d = math.floor(tonumber(fields.delay or info.delay) or 0),
     tm = math.floor(tonumber(info.clock) or 0),
+    i = tostring(my_id) .. ":" .. tostring(seq + 1),
   }
   seq = seq + 1
   event.q = seq
@@ -193,9 +194,14 @@ omsi.on("lan_message", function(from, raw)
   if not ok or type(e) ~= "table" or e.v ~= 1 or type(e.k) ~= "string" then return end
   if not ({ duty = true, arrive = true, depart = true, crash = true, speed = true })[e.k] then return end
 
+  if type(e.i) ~= "string" or #e.i > 24 then return end
+
   if is_host and cfg("host_authoritative", true) then
-    -- A sequência oficial é atribuída pelo host. Não se confia no número enviado pelo cliente.
+    -- O host valida o remetente, elimina reenvios e atribui a sequência oficial.
     if tonumber(from) == 1 then return end
+    for _, previous in ipairs(events) do
+      if previous.i == e.i then return end
+    end
     seq = seq + 1
     e.q = seq
     e.p = tonumber(from) or e.p
@@ -207,7 +213,19 @@ omsi.on("lan_message", function(from, raw)
     if tonumber(from) ~= 1 or not tonumber(e.q) then return end
     local last = tonumber(omsi.storage.get("last_host_seq")) or 0
     if e.q <= last then return end
-    events[#events + 1] = e
+
+    -- O cliente já gravou o evento local antes de enviá-lo ao host.
+    -- Atualiza esse registro com a sequência oficial em vez de duplicá-lo.
+    local already_local = false
+    for _, previous in ipairs(events) do
+      if previous.i == e.i then
+        previous.q = e.q
+        previous.p = e.p
+        already_local = true
+        break
+      end
+    end
+    if not already_local then events[#events + 1] = e end
     omsi.storage.set("last_host_seq", e.q)
     persist()
   end
