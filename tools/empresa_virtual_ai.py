@@ -86,7 +86,6 @@ def main() -> int:
         now = time.monotonic()
         if signature == last_signature or now - last_call < PROMPT_COOLDOWN:
             continue
-        last_signature = signature
         last_call = now
         try:
             recommendation = ask_ollama(args.model, state)
@@ -96,6 +95,7 @@ def main() -> int:
                     "model": args.model,
                     "recommendation": recommendation,
                 })
+                last_signature = signature
                 print("Recomendação atualizada:", recommendation)
         except (OSError, urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
             print(f"IA indisponível; jogo continua sem IA: {exc}")
