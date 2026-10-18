@@ -131,7 +131,7 @@ function M.detect()
     info = has("info"), bus_state = has("bus.state"),
     map_speed_limit = has("map.speed_limit"),
     ui_panel = has("ui.set"), ui_toast = has("ui.toast"),
-    input_events = has("on"), key_events = true,
+    input_events = has("on"), input_hotkey = has("input.hotkey"), input_bindings = has("input.bindings"),
   }
   M.capabilities = c
   M.multiplayer = c.lan_session and c.lan_send and c.json_codec
