@@ -11,7 +11,7 @@ Plugin Lua independente com carreira, XP/pontuação, cargos, cadastro de motori
 - Se a build não oferecer API LAN completa, o plugin registra modo solo/offline e não inventa jogadores nem simula entrega de mensagens.
 
 ### Multiplayer online/LAN
-- Com API LAN suportada pela build, o plugin pode trocar eventos, perfis e despachos pela sessão do próprio jogo.
+- Com API LAN suportada pela build, o plugin pode trocar eventos, perfis e despachos pela sessão do próprio jogo. O despacho automático também exige a API nativa de início de escala; se ela faltar, o plugin não finge que iniciou a viagem.
 - Todos os participantes devem instalar a mesma versão do plugin.
 - É necessário suporte real à sessão LAN, envio de mensagens e JSON. Não há servidor externo, portal ou serviço pago.
 - O modo multiplayer só é considerado disponível quando essas capacidades são detectadas; isso ainda precisa ser validado em runtime em cada versão.
@@ -21,7 +21,7 @@ Plugin Lua independente com carreira, XP/pontuação, cargos, cadastro de motori
 2. Na raiz de conteúdo reconhecida pelo jogo, crie `plugins/empresa_virtual/`.
 3. Copie todos os arquivos deste diretório para essa pasta. `main.lua` e `compat.lua` devem ficar lado a lado.
 4. Inicie o jogo e confira `game.log`; procure `Empresa Virtual compat` e o modo detectado.
-5. Abra as configurações nativas da Empresa Virtual para editar empresa, regras e atalhos. O painel em jogo tem botões para Motoristas, Despachar, Status, Salvar e Configurar.
+5. Confira o diagnóstico em `game.log`. O painel clicável e as configurações editáveis dependem das APIs visuais e de configuração disponíveis nessa build; sem elas, o plugin usa padrões locais e mensagens na tela.
 
 Não substitua arquivos do jogo nem instale dentro de `crates/`.
 
@@ -37,6 +37,8 @@ Não substitua arquivos do jogo nem instale dentro de `crates/`.
 - Se a API de atalhos com modificadores não existir, o plugin não sequestra teclas F* conhecidas; use os botões do painel quando a API visual existir.
 - A verificação de conflito compara os atalhos configurados com os bindings que o openOMSI expõe. Não pode detectar todos os atalhos de mods externos.
 - `painel nativo de configurações`: se ausente, os valores padrão são usados; a configuração editável por interface ainda depende de suporte da build.
+- A documentação base de `docs/PLUGINS.md` descreve `omsi.info`, `omsi.on`, `omsi.every`, `omsi.data` e `omsi.message`, mas não documenta painéis customizados, atalhos com modificadores ou início programático de escala. Nessas builds, carreira e mensagens podem funcionar, enquanto painel clicável, atalhos Ctrl+Alt, despacho automático e multiplayer ficam indisponíveis até a build expor as APIs correspondentes.
+- O evento documentado `duty` e a mudança `next_stop` são usados como compatibilidade para registrar escala e progressão quando eventos mais específicos não existem.
 - Falhas de API opcionais não devem impedir a carreira local.
 - `OMSI_NO_PLUGINS=1` desativa plugins Lua.
 - Para multiplayer, confirme `lan.active`, `lan.me`, `lan.players`, `lan.send`, `json.encode/decode` e uma sessão ativa.
