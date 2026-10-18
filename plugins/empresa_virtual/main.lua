@@ -219,15 +219,20 @@ local function dispatch_default_duty()
 
   if omsi.lan.active() then
     local players = omsi.lan.players() or {}
-    omsi.lan.send(0, payload)
-    toast("Despacho enviado: linha " .. line .. ", viagem " .. tour .. " (" .. tostring(#players + 1) .. " jogadores na sessão).", 7)
-  else
-    local ok, why = pcall(omsi.duty.start, line, tour)
-    if ok then
-      toast("Iniciando escala local: linha " .. line .. ", viagem " .. tour, 6)
-    else
-      toast("Não foi possível iniciar a escala: " .. tostring(why), 7)
+    local sent, send_result, send_reason = pcall(omsi.lan.send, 0, payload)
+    if not sent or send_result ~= true then
+      toast("Não foi possível enviar o despacho: " .. tostring(send_reason or send_result), 7)
+      return
     end
+    toast("Despacho enviado: linha " .. line .. ", viagem " .. tour .. " (" .. tostring(#players + 1) .. " jogadores na sessão).", 7)
+  end
+
+  -- O host também recebe a escala; a mensagem LAN alcança somente os outros jogadores.
+  local called, start_result, start_reason = pcall(omsi.duty.start, line, tour)
+  if called and start_result ~= false then
+    toast("Despacho aplicado localmente: linha " .. line .. ", viagem " .. tour, 6)
+  else
+    toast("Não foi possível iniciar a escala: " .. tostring(start_reason or start_result), 7)
   end
 end
 
@@ -297,10 +302,8 @@ omsi.on("lan_message", function(from, raw)
   if not ok or type(e) ~= "table" or e.v ~= 1 or type(e.k) ~= "string" then return end
 
   if e.k == "dispatch" then
-    if tonumber(from) ~= 1 or not is_host or cfg("auto_accept_dispatch", true) ~= true then
-      -- Apenas o host pode emitir comandos de despacho; clientes podem optar por não os aceitar.
-      if tonumber(from) ~= 1 or is_host then return end
-    end
+    -- Apenas clientes podem aceitar comandos de despacho; o host nunca aceita comandos de clientes.
+    if is_host or tonumber(from) ~= 1 or cfg("auto_accept_dispatch", true) ~= true then return end
     local line = type(e.l) == "string" and e.l:gsub("|", ""):sub(1, 20) or ""
     local tour = type(e.t) == "string" and e.t:gsub("|", ""):sub(1, 20) or ""
     if line == "" or tour == "" then return end
@@ -309,12 +312,11 @@ omsi.on("lan_message", function(from, raw)
       toast("Despacho recusado: sua nota está abaixo do mínimo da empresa.", 7)
       return
     end
-    local ok_start, why = pcall(omsi.duty.start, line, tour)
-    if ok_start then
+    local called, start_result, why = pcall(omsi.duty.start, line, tour)
+    if called and start_result ~= false then
       toast("Despacho recebido: linha " .. line .. ", viagem " .. tour, 7)
-      record("dispatch", { line = line, tour = tour })
     else
-      toast("Falha ao iniciar despacho: " .. tostring(why), 7)
+      toast("Falha ao iniciar despacho: " .. tostring(why or start_result), 7)
     end
     return
   end
