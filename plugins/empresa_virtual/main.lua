@@ -480,7 +480,8 @@ omsi.on("lan_message", function(from, raw)
     profile.line = type(e.l) == "string" and e.l:sub(1, 12) or ""
     profile.tour = type(e.t) == "string" and e.t:sub(1, 12) or ""
     profile.active = tonumber(e.a) == 1
-    profile.last_seen = tonumber(omsi.info().clock) or 0
+    local session_info = omsi.info() or {}
+    profile.last_seen = tonumber(session_info.clock) or 0
     profile.xp = tonumber(profile.xp) or 0
     profile.score = tonumber(profile.score) or 100
     company_roster[name] = profile
