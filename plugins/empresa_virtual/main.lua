@@ -147,13 +147,14 @@ end
 
 local function render_roster()
   if not (omsi.ui and omsi.ui.set) then return end
+  local map_info = omsi.info() or {}
   local children = {
     { type = "row", children = {
       { type = "icon", name = "groups", color = "#60A5FA", size = 20 },
       { type = "text", text = "EMPRESA VIRTUAL", size = 15, weight = "bold", grow = true },
       { type = "badge", text = is_host and "HOST" or "CLIENTE" },
     } },
-    { type = "text", text = company_name .. " • " .. tostring(omsi.info().map or "Mapa não identificado"), size = 11, color = "#9CA3AF" },
+    { type = "text", text = company_name .. " • " .. tostring(map_info.map or "Mapa não identificado"), size = 11, color = "#9CA3AF" },
     { type = "divider" },
   }
   local own = snapshot()
