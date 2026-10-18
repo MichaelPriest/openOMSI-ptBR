@@ -249,8 +249,8 @@ omsi.every(5, function()
 end)
 
 local function dispatch_default_duty()
-  if not is_host or cfg("dispatch_enabled", true) ~= true then
-    toast("Somente o host pode despachar viagens.", 5)
+  if (omsi.lan.active() and not is_host) or cfg("dispatch_enabled", true) ~= true then
+    toast("Somente o host pode despachar viagens na sessão multiplayer.", 5)
     return
   end
   local line = tostring(cfg("dispatch_line", "136") or ""):gsub("|", ""):sub(1, 20)
