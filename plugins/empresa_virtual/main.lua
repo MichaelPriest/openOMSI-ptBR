@@ -52,6 +52,8 @@ local company_roster = omsi.storage.get("company_roster") or {}
 -- Idade em segundos locais desde a última atualização de perfil recebida.
 -- Intencionalmente volátil: não transforma estado antigo persistido em presença atual.
 local profile_age = {}
+local roster_sync_queue = {}
+local roster_sync_seq = 0
 local pending_dispatches = omsi.storage.get("pending_dispatches") or {}
 local dispatch_seq = tonumber(omsi.storage.get("dispatch_seq")) or 0
 local driver_role = tostring(cfg("driver_role", "Motorista"))
@@ -131,6 +133,22 @@ local function player_name_for_id(id)
     end
   end
   return nil
+end
+
+local function queue_roster_snapshot(destination)
+  if not is_host or not omsi.lan.active() then return end
+  -- Enfileira uma cópia compacta por perfil; o envio é limitado abaixo para
+  -- não disparar um burst de mensagens ao entrar na sessão.
+  for name, profile in pairs(company_roster) do
+    local safe_name = tostring(name or ""):gsub("|", ""):sub(1, 24)
+    if safe_name ~= "" then
+      local payload = omsi.json.encode({ v = 1, k = "roster", n = safe_name, r = normalized_role(profile.role), l = tostring(profile.line or ""):sub(1, 12), t = tostring(profile.tour or ""):sub(1, 12), a = profile.active == true and 1 or 0 })
+      if #payload <= 120 and not payload:find("|", 1, true) then
+        roster_sync_seq = roster_sync_seq + 1
+        roster_sync_queue[#roster_sync_queue + 1] = { to = destination, payload = payload, id = roster_sync_seq }
+      end
+    end
+  end
 end
 
 local function send_profile()
@@ -360,9 +378,25 @@ omsi.on("start", function()
   company_roster[own_name].score = career.score
   persist()
   send_profile()
+  if not is_host and omsi.lan.active() and cfg("sync_multiplayer", true) == true then
+    pcall(omsi.lan.send, 1, omsi.json.encode({ v = 1, k = "roster_request" }))
+  end
   render_roster()
   omsi.game.notify(company_name .. " carregada. F4: motoristas; F5: despacho; F7: status.", "info", 6)
   omsi.log(company_name .. " iniciada; host=" .. tostring(is_host))
+end)
+
+omsi.every(1, function()
+  if is_host and omsi.lan.active() and #roster_sync_queue > 0 then
+    -- No máximo cinco mensagens por segundo, abaixo do limite documentado da API.
+    for _ = 1, math.min(5, #roster_sync_queue) do
+      local item = table.remove(roster_sync_queue, 1)
+      local ok, result = pcall(omsi.lan.send, item.to, item.payload)
+      if not ok or result ~= true then
+        omsi.log("Empresa Virtual: falha ao sincronizar perfil do cadastro")
+      end
+    end
+  end
 end)
 
 omsi.every(5, function()
@@ -506,6 +540,12 @@ omsi.on("lan_message", function(from, raw)
   if type(raw) ~= "string" or #raw > 120 then return end
   local ok, e = pcall(omsi.json.decode, raw)
   if not ok or type(e) ~= "table" or e.v ~= 1 or type(e.k) ~= "string" then return end
+
+  if e.k == "roster_request" then
+    if not is_host or tonumber(from) == 1 then return end
+    queue_roster_snapshot(tonumber(from))
+    return
+  end
 
   if e.k == "profile" then
     if not is_host or tonumber(from) == 1 then return end
@@ -672,7 +712,14 @@ omsi.every(2, evaluate_rules)
 -- Reenvia eventos ainda sem confirmação do host, com limite de uma tentativa por ciclo.
 -- A fila fica persistida para sobreviver a recargas do plugin e desconexões temporárias.
 omsi.every(10, function()
-  if enabled then send_profile() end
+  if enabled then
+    send_profile()
+    -- Reconsulta o cadastro periodicamente para recuperar perfis perdidos e
+    -- permitir que quem entrou depois receba o estado conhecido pelo host.
+    if not is_host and omsi.lan.active() and cfg("sync_multiplayer", true) == true then
+      pcall(omsi.lan.send, 1, omsi.json.encode({ v = 1, k = "roster_request" }))
+    end
+  end
 end)
 
 omsi.every(5, function()
