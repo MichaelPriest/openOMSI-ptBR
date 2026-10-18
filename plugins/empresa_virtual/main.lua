@@ -353,11 +353,9 @@ omsi.on("start", function()
   omsi.log(company_name .. " iniciada; host=" .. tostring(is_host))
 end)
 
-local dispatch_elapsed = 0
 omsi.every(5, function()
   if roster_visible then render_roster() end
   if not is_host or not omsi.lan.active() then return end
-  dispatch_elapsed = dispatch_elapsed + 5
   for dispatch_id, pending in pairs(pending_dispatches) do
     pending.wait_seconds = (tonumber(pending.wait_seconds) or 0) + 5
     local received = (tonumber(pending.accepted) or 0) + (tonumber(pending.refused) or 0)
