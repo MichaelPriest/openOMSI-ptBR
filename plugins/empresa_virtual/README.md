@@ -1,40 +1,38 @@
 # Empresa Virtual — pacote instalável para openOMSI
 
-Plugin Lua independente: carreira, XP/pontuação, cargos, cadastro local de motoristas,
-despacho de viagens pelo host e sincronização LAN quando a API necessária estiver presente.
+Plugin Lua independente com carreira, XP/pontuação, cargos, cadastro de motoristas, despacho e sincronização multiplayer quando a API de rede estiver disponível.
+
+## Dois modos de operação
+
+### Solo/offline
+- Não exige internet, portal, conta, servidor ou banco de dados online.
+- Carreira, pontuação, cargos, eventos e configurações ficam no armazenamento local do jogo.
+- Cadastro e funcionalidades locais continuam disponíveis; despacho remoto e sincronização com outros computadores não funcionam sem multiplayer.
+- Se a build não oferecer API LAN completa, o plugin registra modo solo/offline e não inventa jogadores nem simula entrega de mensagens.
+
+### Multiplayer online/LAN
+- Com API LAN suportada pela build, o plugin pode trocar eventos, perfis e despachos pela sessão do próprio jogo.
+- Todos os participantes devem instalar a mesma versão do plugin.
+- É necessário suporte real à sessão LAN, envio de mensagens e JSON. Não há servidor externo, portal ou serviço pago.
+- O modo multiplayer só é considerado disponível quando essas capacidades são detectadas; isso ainda precisa ser validado em runtime em cada versão.
 
 ## Instalação
-
 1. Feche o openOMSI.
-2. Na pasta de conteúdo que o openOMSI usa, crie `plugins/empresa_virtual/`.
-3. Copie **todos** os arquivos deste diretório para essa pasta. O resultado deve conter
-   `main.lua` e `compat.lua` lado a lado.
-4. Inicie o jogo e confira `game.log`; procure por `Empresa Virtual compat`.
-5. Configure as opções do plugin na interface de configurações do openOMSI.
+2. Na raiz de conteúdo reconhecida pelo jogo, crie `plugins/empresa_virtual/`.
+3. Copie todos os arquivos deste diretório para essa pasta. `main.lua` e `compat.lua` devem ficar lado a lado.
+4. Inicie o jogo e confira `game.log`; procure `Empresa Virtual compat` e o modo detectado.
+5. Configure as opções no jogo.
 
-Não substitua arquivos do jogo e não instale dentro de `crates/` ou da pasta de código-fonte.
-A versão do plugin deve ser instalada igualmente no host e nos clientes para sincronização.
+Não substitua arquivos do jogo nem instale dentro de `crates/`.
 
 ## Diagnóstico
-
-- `API incompativel ou incompleta`: o plugin lista as capacidades obrigatórias ausentes no log e
-  não inicia; isso evita erros em cascata e não significa que essa versão esteja suportada.
-- `OMSI_NO_PLUGINS=1`: desativa todos os plugins, incluindo Lua.
-- Sem multiplayer: confirme que a sessão LAN está ativa e que `lan.active`, `lan.send` e
-  `json.encode/decode` existem na build usada.
-- Dados da carreira/eventos são locais. Não há portal, servidor, banco online ou serviço pago.
-- Os registros e cargos não são anti-cheat: o protocolo LAN não autentica identidades e o cadastro
-  é indexado por nome apresentado na sessão.
+- `modo=solo-offline`: carreira local habilitada; multiplayer não confirmado pela API.
+- `APIs essenciais ausentes`: veja no log a lista de dependências necessárias.
+- `OMSI_NO_PLUGINS=1` desativa plugins Lua.
+- Para multiplayer, confirme `lan.active`, `lan.me`, `lan.players`, `lan.send`, `json.encode/decode` e uma sessão ativa.
+- Progresso offline permanece no computador local e não é automaticamente fundido com dados de outros jogadores.
 
 ## Compatibilidade verificada
+Referência de desenvolvimento: API documentada do openOMSI v0.3.37 (`docs/PLUGINS.md` e `docs/plugin-api.json`). A detecção não prova compatibilidade em execução. Nenhuma versão está marcada como testada dentro do jogo.
 
-A versão de referência do código é a API documentada do openOMSI **v0.3.37**
-(`docs/PLUGINS.md` e `docs/plugin-api.json`). Neste repositório, a implementação foi
-inspecionada estaticamente, mas ainda não foi executada em cada binário oficial. Portanto,
-**nenhuma versão do jogo está marcada como runtime-testada por este pacote**. A camada
-`compat.lua` faz detecção de capacidades; ela não presume que números de versão impliquem
-compatibilidade nem cria substitutos para APIs não confirmadas.
-
-Para homologar uma versão: instalar em cópia separada, verificar inicialização no `game.log`,
-abrir opções, verificar carreira/persistência, fazer uma viagem com paradas, testar F4/F5/F7,
-e testar host + cliente numa sessão LAN. Registre versão exata, sistema operacional e resultado.
+Homologação por versão: verificar inicialização/log, configurações, carreira e persistência offline, viagem com paradas, F4/F5/F7 e sessão multiplayer host + cliente. Registrar versão exata, sistema operacional e resultado.
