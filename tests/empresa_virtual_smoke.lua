@@ -88,12 +88,26 @@ assert((data.empresa_virtual_career.completed_stops or 0) == 1,
 assert((data.empresa_virtual_career.xp or 0) == 10,
   "one completed stop must award configured XP once")
 
--- A later stop on the same duty must still count after the dedupe window.
-tick(3)
+-- Different stops must not be suppressed just because they occur close together.
 emit("stop_depart", "Ponto seguinte", "stop-2", 2, 0)
 assert((data.empresa_virtual_career.completed_stops or 0) == 2,
-  "a later stop must be counted")
+  "a different stop must count even inside the dedupe window")
 assert((data.empresa_virtual_career.xp or 0) == 20,
+  "a different stop must award XP even inside the dedupe window")
+
+-- Repeating the same stop event in the dedupe window must not award twice.
+emit("stop_depart", "Ponto seguinte", "stop-2", 2, 0)
+assert((data.empresa_virtual_career.completed_stops or 0) == 2,
+  "the same stop repeated inside the dedupe window must be ignored")
+assert((data.empresa_virtual_career.xp or 0) == 20,
+  "duplicate stop event must not award XP twice")
+
+-- A later stop on the same duty must still count after the dedupe window.
+tick(3)
+emit("stop_depart", "Próxima parada", "stop-3", 3, 0)
+assert((data.empresa_virtual_career.completed_stops or 0) == 3,
+  "a later stop must be counted")
+assert((data.empresa_virtual_career.xp or 0) == 30,
   "XP must increase exactly once for the later stop")
 
 -- Required UI/log fallbacks should not report multiplayer in offline mode.
