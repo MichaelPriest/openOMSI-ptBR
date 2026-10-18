@@ -363,7 +363,7 @@ render_roster = function()
   } }
 
   local ok, why = omsi.ui.set("empresa_virtual_roster", {
-    anchor = "top_right", x = 18, y = 72, width = 360, padding = 14, gap = 7,
+    anchor = "top_right", x = 18, y = 390, width = 360, padding = 14, gap = 7,
     background = "#111827F2", radius = 14, accent = "#3B82F6",
     visible = roster_visible, draggable = true, children = children,
   })
