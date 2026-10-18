@@ -1,6 +1,6 @@
 -- Smoke/regression tests for Empresa Virtual (Lua 5.4).
 -- Run from the repository root: lua5.4 tests/empresa_virtual_smoke.lua
-local callbacks, timers, logs = {}, {}, {}
+local callbacks, timers, logs, hotkeys, toasts = {}, {}, {}, {}, {}
 local data = {}
 local duty_start_calls = 0
 
@@ -32,7 +32,7 @@ omsi = {
   },
   ui = {
     set = function() return true end,
-    toast = function() return true end,
+    toast = function(message) table.insert(toasts, tostring(message)); return true end,
   },
   duty = {
     get = function() return { line = "136", tour = "3", trip = "3", delay = 0 } end,
@@ -41,7 +41,7 @@ omsi = {
   bus = { state = function() return { speed = 0 } end },
   map = { speed_limit = function() return 50 end },
   input = {
-    hotkey = function() return 1 end,
+    hotkey = function(chord, fn) hotkeys[chord] = fn; return #hotkeys end,
     bindings = function() return {} end,
   },
 }
@@ -126,6 +126,19 @@ emit("setting", "promotion_xp_instructor", 1500)
 emit("setting", "promotion_xp_driver", 20)
 assert(data.empresa_virtual_career.rank == "Motorista",
   "rank must be recalculated immediately when promotion thresholds change")
+
+-- DriverOps is integrated into the Lua plugin and binds the legacy F9/F10 actions.
+assert(type(hotkeys.F9) == "function", "F9 must expose the full DriverOps operational report")
+assert(type(hotkeys.F10) == "function", "F10 must expose the quick DriverOps status")
+hotkeys.F9()
+local full_report = table.concat(toasts, "\n")
+assert(full_report:find("DRIVEROPS", 1, true), "full DriverOps report must identify itself")
+assert(full_report:find("Próxima parada: Terminal", 1, true), "DriverOps must use the live next-stop field")
+assert(full_report:find("Limite 50 km/h", 1, true), "DriverOps must report the live map speed limit")
+assert(full_report:find("Passageiros 0", 1, true), "DriverOps must report live passenger count")
+hotkeys.F10()
+assert(toasts[#toasts]:find("DriverOps", 1, true) and toasts[#toasts]:find("Terminal", 1, true),
+  "quick DriverOps status must include live stop information")
 
 -- Required UI/log fallbacks should not report multiplayer in offline mode.
 local compat = require("compat")
