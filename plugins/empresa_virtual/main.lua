@@ -1,19 +1,18 @@
 -- Empresa Virtual openOMSI
 -- API pública: docs/PLUGINS.md da tag v0.3.37.
 -- Protocolo multiplayer: mensagens JSON compactas <= 120 caracteres, sem "|".
-local PLUGIN = "empresa_virtual"
 local UDP_PORT = 47800
 local panel_settings = omsi.plugin.settings({
   { key = "enabled", type = "bool", label = "Ativar Empresa Virtual", default = true },
-  { key = "ai_host", type = "bool", label = "Este computador hospeda a IA local", default = false },
+  { key = "run_ai", type = "bool", label = "Ativar IA local neste host", default = false },
 }, "Empresa Virtual")
 local enabled = panel_settings.enabled ~= false
+local run_ai = panel_settings.run_ai == true
 local is_host = false
 local my_id = 0
 local seq = tonumber(omsi.storage.get("event_seq")) or 0
 local events = omsi.storage.get("events") or {}
 local last_ai_notice = ""
-local last_ai_check = 0
 
 local function trim(s, n)
   s = tostring(s or "")
@@ -85,7 +84,7 @@ local function current_snapshot()
 end
 
 local function check_ai_inbox()
-  if not is_host or not enabled then return end
+  if not is_host or not enabled or not run_ai then return end
   local raw = omsi.plugin.read("agent-inbox.json")
   if not raw or raw == "" then return end
   local data = omsi.json.decode(raw)
@@ -96,6 +95,11 @@ local function check_ai_inbox()
     omsi.ui.toast(rec, { title = "IA de Operações", icon = "psychology", seconds = 8 })
   end
 end
+
+omsi.on("setting", function(key, value)
+  if key == "enabled" then enabled = value == true end
+  if key == "run_ai" then run_ai = value == true end
+end)
 
 omsi.on("start", function()
   my_id, _, is_host = omsi.lan.me()
@@ -163,7 +167,7 @@ omsi.every(5, function()
   if not enabled or not omsi.lan.active() then return end
   my_id, _, is_host = omsi.lan.me()
   is_host = is_host == true
-  if is_host then
+  if is_host and run_ai then
     local s = current_snapshot()
     local payload = omsi.json.encode(s)
     if #payload <= 8192 then omsi.send(UDP_PORT, payload) end
