@@ -49,6 +49,23 @@ career.completed_stops = tonumber(career.completed_stops) or 0
 local seq = tonumber(omsi.storage.get("event_seq")) or 0
 local pending_events = omsi.storage.get("pending_events") or {}
 local company_roster = omsi.storage.get("company_roster") or {}
+-- Mantém IDs recentes separados do log visível, que é limitado a 300 eventos.
+local seen_event_ids = omsi.storage.get("seen_event_ids") or {}
+local seen_event_order = omsi.storage.get("seen_event_order") or {}
+local seen_event_set = {}
+for _, event_id in ipairs(seen_event_order) do
+  if type(event_id) == "string" then seen_event_set[event_id] = true end
+end
+for _, event in ipairs(events) do
+  if type(event.i) == "string" and not seen_event_set[event.i] then
+    seen_event_order[#seen_event_order + 1] = event.i
+    seen_event_set[event.i] = true
+  end
+end
+while #seen_event_order > 1000 do
+  local expired = table.remove(seen_event_order, 1)
+  seen_event_set[expired] = nil
+end
 -- Idade em segundos locais desde a última atualização de perfil recebida.
 -- Intencionalmente volátil: não transforma estado antigo persistido em presença atual.
 local profile_age = {}
@@ -71,6 +88,8 @@ local function persist()
   omsi.storage.set("events", events)
   omsi.storage.set("event_seq", seq)
   omsi.storage.set("pending_events", pending_events)
+  omsi.storage.set("seen_event_order", seen_event_order)
+  omsi.storage.set("seen_event_ids", seen_event_set)
   omsi.storage.set("company_roster", company_roster)
   omsi.storage.set("pending_dispatches", pending_dispatches)
   omsi.storage.set("dispatch_seq", dispatch_seq)
@@ -88,6 +107,16 @@ local function queue_event(event)
   pending_events[#pending_events + 1] = event
   persist()
   send_pending_event(event)
+end
+
+local function remember_event_id(event_id)
+  if type(event_id) ~= "string" or event_id == "" or seen_event_set[event_id] then return end
+  seen_event_set[event_id] = true
+  seen_event_order[#seen_event_order + 1] = event_id
+  while #seen_event_order > 1000 do
+    local expired = table.remove(seen_event_order, 1)
+    seen_event_set[expired] = nil
+  end
 end
 
 local function acknowledge_event(event_id)
@@ -677,12 +706,11 @@ omsi.on("lan_message", function(from, raw)
   if is_host and cfg("host_authoritative", true) then
     -- O host valida o remetente, elimina reenvios e atribui a sequência oficial.
     if tonumber(from) == 1 then return end
-    for _, previous in ipairs(events) do
-      if previous.i == e.i then
-        pcall(omsi.lan.send, tonumber(from), omsi.json.encode({ v = 1, k = "ack", i = e.i }))
-        return
-      end
+    if seen_event_set[e.i] then
+      pcall(omsi.lan.send, tonumber(from), omsi.json.encode({ v = 1, k = "ack", i = e.i }))
+      return
     end
+    remember_event_id(e.i)
     seq = seq + 1
     e.q = seq
     e.p = tonumber(from) or e.p
@@ -712,7 +740,10 @@ omsi.on("lan_message", function(from, raw)
         break
       end
     end
-    if not already_local then events[#events + 1] = e end
+    if not already_local and not seen_event_set[e.i] then
+      events[#events + 1] = e
+      remember_event_id(e.i)
+    end
     if e.q > last then last = e.q end
     omsi.storage.set("last_host_seq", last)
     persist()
