@@ -71,7 +71,10 @@ assert(callbacks.start and #callbacks.start > 0, "plugin must register start eve
 emit("start")
 assert(data.empresa_virtual_career ~= nil, "career must persist locally at startup")
 
--- The host must not start a second duty when one is already active.\nemit("ui_click", "empresa_virtual_dashboard", "ev_dispatch")\nassert(duty_start_calls == 0, "dispatch must refuse when the driver already has an active duty")\n
+-- The host must not start a second duty when one is already active.
+emit("ui_click", "empresa_virtual_dashboard", "ev_dispatch")
+assert(duty_start_calls == 0, "dispatch must refuse when the driver already has an active duty")
+
 -- The old and new duty event names must not create two career records.
 emit("duty", "136", "3")
 emit("duty_start", "136", "3")
