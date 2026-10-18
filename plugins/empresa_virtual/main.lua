@@ -454,10 +454,9 @@ omsi.on("lan_message", function(from, raw)
   else
     if tonumber(from) ~= 1 or not tonumber(e.q) then return end
     local last = tonumber(omsi.storage.get("last_host_seq")) or 0
-    if e.q <= last then return end
 
-    -- O cliente já gravou o evento local antes de enviá-lo ao host.
-    -- Atualiza esse registro com a sequência oficial em vez de duplicá-lo.
+    -- Aceita eventos fora de ordem, pois uma sequência mais alta não prova
+    -- que todos os eventos anteriores chegaram. A deduplicação é pelo ID.
     local already_local = false
     for _, previous in ipairs(events) do
       if previous.i == e.i then
@@ -468,7 +467,8 @@ omsi.on("lan_message", function(from, raw)
       end
     end
     if not already_local then events[#events + 1] = e end
-    omsi.storage.set("last_host_seq", e.q)
+    if e.q > last then last = e.q end
+    omsi.storage.set("last_host_seq", last)
     persist()
   end
 end)
