@@ -1,0 +1,33 @@
+name: Package Empresa Virtual test plugin
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "plugins/empresa_virtual/**"
+      - ".github/workflows/empresa-virtual-package.yml"
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate package structure
+        run: |
+          test -f plugins/empresa_virtual/main.lua
+          test -f plugins/empresa_virtual/compat.lua
+          test -f plugins/empresa_virtual/README.md
+          test -f plugins/empresa_virtual/plugin.json
+          grep -q 'compat.startup' plugins/empresa_virtual/main.lua
+      - name: Create portable ZIP
+        run: |
+          mkdir -p dist
+          zip -r dist/empresa-virtual-openomsi-test.zip plugins/empresa_virtual
+          sha256sum dist/empresa-virtual-openomsi-test.zip > dist/empresa-virtual-openomsi-test.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: empresa-virtual-openomsi-test
+          path: |
+            dist/empresa-virtual-openomsi-test.zip
+            dist/empresa-virtual-openomsi-test.zip.sha256
+          if-no-files-found: error
