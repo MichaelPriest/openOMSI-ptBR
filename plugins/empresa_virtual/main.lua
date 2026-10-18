@@ -7,17 +7,17 @@ local settings = omsi.plugin.settings({
   { key = "save_events", type = "bool", label = "Registrar eventos e viagens", default = true },
   { key = "sync_multiplayer", type = "bool", label = "Sincronizar eventos pelo multiplayer", default = true },
   { key = "warn_speed", type = "bool", label = "Alertar excesso de velocidade", default = true },
-  { key = "speed_tolerance", type = "number", label = "Tolerância acima do limite (km/h)", default = 5 },
-  { key = "speed_repeat_seconds", type = "number", label = "Intervalo entre alertas de velocidade (s)", default = 20 },
+  { key = "speed_tolerance", type = "number", label = "Tolerância acima do limite (km/h)", default = 5, min = 0, max = 30, step = 1 },
+  { key = "speed_repeat_seconds", type = "number", label = "Intervalo entre alertas de velocidade (s)", default = 20, min = 5, max = 180, step = 5 },
   { key = "warn_delay", type = "bool", label = "Alertar atrasos", default = true },
-  { key = "delay_warn_seconds", type = "number", label = "Atraso para emitir alerta (s)", default = 180 },
-  { key = "delay_critical_seconds", type = "number", label = "Atraso crítico (s)", default = 600 },
+  { key = "delay_warn_seconds", type = "number", label = "Atraso para emitir alerta (s)", default = 180, min = 0, max = 3600, step = 30 },
+  { key = "delay_critical_seconds", type = "number", label = "Atraso crítico (s)", default = 600, min = 0, max = 7200, step = 60 },
   { key = "warn_crash", type = "bool", label = "Registrar e alertar colisões", default = true },
-  { key = "crash_penalty", type = "number", label = "Pontos descontados por colisão", default = 15 },
-  { key = "punctuality_weight", type = "number", label = "Peso da pontualidade (0 a 100)", default = 40 },
-  { key = "safety_weight", type = "number", label = "Peso da condução segura (0 a 100)", default = 40 },
-  { key = "service_weight", type = "number", label = "Peso do serviço (0 a 100)", default = 20 },
-  { key = "minimum_score", type = "number", label = "Pontuação mínima recomendada", default = 70 },
+  { key = "crash_penalty", type = "number", label = "Pontos descontados por colisão", default = 15, min = 0, max = 100, step = 1 },
+  { key = "punctuality_weight", type = "number", label = "Peso da pontualidade (0 a 100)", default = 40, min = 0, max = 100, step = 5 },
+  { key = "safety_weight", type = "number", label = "Peso da condução segura (0 a 100)", default = 40, min = 0, max = 100, step = 5 },
+  { key = "service_weight", type = "number", label = "Peso do serviço (0 a 100)", default = 20, min = 0, max = 100, step = 5 },
+  { key = "minimum_score", type = "number", label = "Pontuação mínima recomendada", default = 70, min = 0, max = 100, step = 5 },
   { key = "host_authoritative", type = "bool", label = "Host é autoridade dos registros sincronizados", default = true },
 }, "Agente de Operações — Empresa Virtual")
 
@@ -35,7 +35,6 @@ local last_speed_warning = -100000
 local last_delay_level = 0
 local is_host = false
 local my_id = 0
-local last_speed = nil
 
 local function persist()
   while #events > 300 do table.remove(events, 1) end
@@ -137,10 +136,10 @@ local function evaluate_rules()
     end
   end
   last_delay_level = delay_level
-  last_speed = s.speed
 end
 
 omsi.on("setting", function(key, value)
+  settings[key] = value
   if key == "enabled" then enabled = value == true end
   if key == "company_name" then company_name = tostring(value or "Viação Virtual") end
 end)
