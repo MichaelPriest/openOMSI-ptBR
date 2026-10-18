@@ -39,6 +39,8 @@ local settings = omsi.plugin.settings({
   { key = "hotkey_dispatch", type = "text", label = "Atalho para despacho", default = "F5" },
   { key = "hotkey_status", type = "text", label = "Atalho para status", default = "F7" },
   { key = "hotkey_save", type = "text", label = "Atalho para salvar registros", default = "F6" },
+  { key = "hotkey_driverops", type = "text", label = "Atalho DriverOps (operação completa)", default = "F9" },
+  { key = "hotkey_quickstatus", type = "text", label = "Atalho DriverOps (status rápido)", default = "F10" },
 }, "Agente de Operações — Empresa Virtual")
 
 local enabled = settings.enabled ~= false
@@ -319,11 +321,22 @@ local function snapshot()
   local bus = omsi.bus.state() or {}
   local passengers = info.passengers
   local me, name, host = omsi.lan.me()
+  local vehicle = "não informado"
+  if type(omsi.vehicle) == "function" then
+    local ok, value = pcall(omsi.vehicle)
+    if ok and value ~= nil and tostring(value) ~= "" then vehicle = tostring(value) end
+  end
+  local speed_limit = nil
+  if type(omsi.map) == "table" and type(omsi.map.speed_limit) == "function" then
+    local ok, value = pcall(omsi.map.speed_limit)
+    if ok then speed_limit = tonumber(value) end
+  end
   return {
     player = tostring(name or "Motorista"),
     player_id = me,
     host = host == true,
     map = tostring(info.map or ""),
+    vehicle = vehicle,
     line = tostring(duty.line or info.line or "—"),
     tour = tostring(duty.tour or info.tour or "—"),
     trip = tostring(duty.trip or info.trip or "—"),
@@ -331,7 +344,7 @@ local function snapshot()
     delay = tonumber(duty.delay or info.delay) or 0,
     speed = tonumber(bus.speed or info.speed) or 0,
     passengers = tonumber(passengers) or 0,
-    speed_limit = tonumber(omsi.map.speed_limit()) or 0,
+    speed_limit = speed_limit or 0,
     clock = tonumber(info.clock) or 0,
   }
 end
@@ -590,6 +603,22 @@ local function show_status()
   end
 end
 
+-- DriverOps integrado: consulta somente dados fornecidos pela sessão do simulador.
+local function show_driverops()
+  local st = snapshot()
+  local seconds = math.floor(math.abs(st.delay) + 0.5)
+  local delay_text = st.delay == 0 and "no horário (0s)" or string.format("%s%02d:%02d", st.delay < 0 and "adiantado " or "atrasado ", math.floor(seconds / 60), seconds % 60)
+  toast("DRIVEROPS | " .. st.vehicle .. " | " .. (st.map ~= "" and st.map or "mapa não informado"), 7)
+  toast(string.format("Linha %s • Viagem %s • %s • Próxima parada: %s", st.line, st.trip, delay_text, st.next_stop), 8)
+  local limit_text = st.speed_limit > 0 and string.format("%.0f km/h", st.speed_limit) or "não informado"
+  toast(string.format("Velocidade %.0f km/h • Limite %s • Passageiros %d", st.speed, limit_text, st.passengers), 7)
+end
+
+local function show_driverops_quick()
+  local st = snapshot()
+  toast(string.format("DriverOps | %.0f km/h | Linha %s | Viagem %s | Próxima: %s", st.speed, st.line, st.trip, st.next_stop), 5)
+end
+
 local function save_records()
   persist()
   save_career()
@@ -699,12 +728,13 @@ render_dashboard = function()
         { type = "badge", text = career.rank },
       } },
       { type = "text", text = "Linha " .. st.line .. " • Viagem " .. st.tour .. " • Próxima: " .. st.next_stop, size = 11 },
-      { type = "text", text = string.format("%.0f km/h • atraso %ds", st.speed, math.floor(st.delay)), size = 11, color = st.delay > 180 and "#FCA5A5" or "#D1D5DB" },
+      { type = "text", text = string.format("%.0f km/h • atraso %ds • limite %s km/h", st.speed, math.floor(st.delay), st.speed_limit > 0 and string.format("%.0f", st.speed_limit) or "—"), size = 11, color = st.delay > 180 and "#FCA5A5" or "#D1D5DB" },
       { type = "divider" },
       { type = "row", children = {
         { type = "button", id = "ev_open_career", text = "Carreira" },
         { type = "button", id = "ev_open_roster", text = "Motoristas" },
         { type = "button", id = "ev_dispatch", text = "Despachar" },
+        { type = "button", id = "ev_driverops", text = "DriverOps" },
       } },
       { type = "row", children = {
         { type = "button", id = "ev_status", text = "Status" },
@@ -739,6 +769,8 @@ configure_hotkeys = function()
     { key = "hotkey_dispatch", fallback = "F5", label = "despacho", run = dispatch_default_duty },
     { key = "hotkey_status", fallback = "F7", label = "status", run = show_status },
     { key = "hotkey_save", fallback = "F6", label = "salvar", run = save_records },
+    { key = "hotkey_driverops", fallback = "F9", label = "DriverOps operação", run = show_driverops },
+    { key = "hotkey_quickstatus", fallback = "F10", label = "DriverOps status rápido", run = show_driverops_quick },
   }
   local used = {}
   for _, action in ipairs(actions) do
@@ -787,6 +819,8 @@ omsi.on("ui_click", function(panel, element)
       render_dashboard()
     elseif element == "ev_dispatch" then
       dispatch_default_duty()
+    elseif element == "ev_driverops" then
+      show_driverops()
     elseif element == "ev_status" then
       show_status()
     elseif element == "ev_save" then
