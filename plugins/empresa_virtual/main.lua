@@ -35,16 +35,28 @@ local settings = omsi.plugin.settings({
   { key = "dispatch_minimum_score", type = "number", label = "Nota mínima para receber despacho", default = 50, min = 0, max = 100, step = 5 },
   { key = "auto_accept_dispatch", type = "bool", label = "Aceitar despacho do host automaticamente", default = true },
   { key = "host_authoritative", type = "bool", label = "Host é autoridade dos registros sincronizados", default = true },
-  { key = "hotkey_roster", type = "text", label = "Atalho do painel de motoristas", default = "Ctrl+Alt+KeyM" },
-  { key = "hotkey_dispatch", type = "text", label = "Atalho para despacho", default = "Ctrl+Alt+KeyD" },
-  { key = "hotkey_status", type = "text", label = "Atalho para status", default = "Ctrl+Alt+KeyP" },
-  { key = "hotkey_save", type = "text", label = "Atalho para salvar registros", default = "Ctrl+Alt+KeyS" },
+  { key = "hotkey_roster", type = "text", label = "Atalho do painel de motoristas", default = "F4" },
+  { key = "hotkey_dispatch", type = "text", label = "Atalho para despacho", default = "F5" },
+  { key = "hotkey_status", type = "text", label = "Atalho para status", default = "F7" },
+  { key = "hotkey_save", type = "text", label = "Atalho para salvar registros", default = "F6" },
 }, "Agente de Operações — Empresa Virtual")
 
 local enabled = settings.enabled ~= false
+local legacy_hotkeys = {
+  hotkey_roster = "Ctrl+Alt+KeyM",
+  hotkey_dispatch = "Ctrl+Alt+KeyD",
+  hotkey_status = "Ctrl+Alt+KeyP",
+  hotkey_save = "Ctrl+Alt+KeyS",
+}
 local function cfg(key, fallback)
   local value = settings[key]
   if value == nil then return fallback end
+  -- Migra os atalhos padrão antigos: algumas builds tratam Ctrl+Alt+M
+  -- como conflito com Ctrl+M. Não preservamos esses quatro padrões legados.
+  if legacy_hotkeys[key] and value == legacy_hotkeys[key] then
+    pcall(function() settings[key] = fallback end)
+    return fallback
+  end
   return value
 end
 
@@ -594,7 +606,7 @@ render_dashboard = function()
         { type = "button", id = "ev_save", text = "Salvar" },
         { type = "button", id = "ev_settings", text = "Configurar" },
       } },
-      { type = "text", text = "Atalhos: " .. tostring(cfg("hotkey_roster", "Ctrl+Alt+KeyM")) .. " • " .. tostring(cfg("hotkey_dispatch", "Ctrl+Alt+KeyD")), size = 9, color = "#9CA3AF" },
+      { type = "text", text = "Atalhos: " .. tostring(cfg("hotkey_roster", "F4")) .. " • " .. tostring(cfg("hotkey_dispatch", "F5")), size = 9, color = "#9CA3AF" },
     },
   }
   local ok, why = omsi.ui.set("empresa_virtual_dashboard", panel)
@@ -618,10 +630,10 @@ configure_hotkeys = function()
     if ok and type(result) == "table" then bindings = result end
   end
   local actions = {
-    { key = "hotkey_roster", fallback = "Ctrl+Alt+KeyM", label = "motoristas", run = function() roster_visible = not roster_visible; render_roster(); render_dashboard() end },
-    { key = "hotkey_dispatch", fallback = "Ctrl+Alt+KeyD", label = "despacho", run = dispatch_default_duty },
-    { key = "hotkey_status", fallback = "Ctrl+Alt+KeyP", label = "status", run = show_status },
-    { key = "hotkey_save", fallback = "Ctrl+Alt+KeyS", label = "salvar", run = save_records },
+    { key = "hotkey_roster", fallback = "F4", label = "motoristas", run = function() roster_visible = not roster_visible; render_roster(); render_dashboard() end },
+    { key = "hotkey_dispatch", fallback = "F5", label = "despacho", run = dispatch_default_duty },
+    { key = "hotkey_status", fallback = "F7", label = "status", run = show_status },
+    { key = "hotkey_save", fallback = "F6", label = "salvar", run = save_records },
   }
   local used = {}
   for _, action in ipairs(actions) do
