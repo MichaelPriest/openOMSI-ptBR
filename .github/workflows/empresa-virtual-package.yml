@@ -12,8 +12,14 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - name: Validate package structure
+      - name: Install Lua syntax checker
         run: |
+          sudo apt-get update
+          sudo apt-get install -y lua5.4
+      - name: Validate package structure and Lua syntax
+        run: |
+          luac5.4 -p plugins/empresa_virtual/main.lua
+          luac5.4 -p plugins/empresa_virtual/compat.lua
           test -f plugins/empresa_virtual/main.lua
           test -f plugins/empresa_virtual/compat.lua
           test -f plugins/empresa_virtual/README.md
