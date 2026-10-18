@@ -24,6 +24,11 @@ local settings = omsi.plugin.settings({
   { key = "promotion_xp_instructor", type = "number", label = "XP para Instrutor", default = 1500, min = 0, max = 50000, step = 100 },
   { key = "speed_score_penalty", type = "number", label = "Pontos perdidos por alerta de velocidade", default = 2, min = 0, max = 25, step = 1 },
   { key = "punctual_stop_reward", type = "number", label = "Pontos por parada pontual", default = 1, min = 0, max = 5, step = 1 },
+  { key = "dispatch_enabled", type = "bool", label = "Permitir despacho de viagens pelo host", default = true },
+  { key = "dispatch_line", type = "text", label = "Linha padrão para despacho", default = "136" },
+  { key = "dispatch_tour", type = "text", label = "Viagem/tabela padrão para despacho", default = "3" },
+  { key = "dispatch_minimum_score", type = "number", label = "Nota mínima para receber despacho", default = 50, min = 0, max = 100, step = 5 },
+  { key = "auto_accept_dispatch", type = "bool", label = "Aceitar despacho do host automaticamente", default = true },
   { key = "host_authoritative", type = "bool", label = "Host é autoridade dos registros sincronizados", default = true },
 }, "Agente de Operações — Empresa Virtual")
 
@@ -189,9 +194,48 @@ omsi.on("start", function()
   omsi.log(company_name .. " iniciada; host=" .. tostring(is_host))
 end)
 
+local function dispatch_default_duty()
+  if not is_host or cfg("dispatch_enabled", true) ~= true then
+    toast("Somente o host pode despachar viagens.", 5)
+    return
+  end
+  local line = tostring(cfg("dispatch_line", "136") or ""):gsub("|", ""):sub(1, 20)
+  local tour = tostring(cfg("dispatch_tour", "3") or ""):gsub("|", ""):sub(1, 20)
+  if line == "" or tour == "" then
+    toast("Configure uma linha e uma viagem válidas nas opções da Empresa Virtual.", 6)
+    return
+  end
+  if career.score < (tonumber(cfg("dispatch_minimum_score", 50)) or 50) then
+    toast("Nota abaixo do mínimo para despacho. Nota atual: " .. math.floor(career.score), 6)
+    return
+  end
+
+  local command = { v = 1, k = "dispatch", l = line, t = tour }
+  local payload = omsi.json.encode(command)
+  if #payload > 120 or payload:find("|", 1, true) then
+    toast("Despacho não enviado: dados excedem o limite multiplayer.", 6)
+    return
+  end
+
+  if omsi.lan.active() then
+    local players = omsi.lan.players() or {}
+    omsi.lan.send(0, payload)
+    toast("Despacho enviado: linha " .. line .. ", viagem " .. tour .. " (" .. tostring(#players + 1) .. " jogadores na sessão).", 7)
+  else
+    local ok, why = pcall(omsi.duty.start, line, tour)
+    if ok then
+      toast("Iniciando escala local: linha " .. line .. ", viagem " .. tour, 6)
+    else
+      toast("Não foi possível iniciar a escala: " .. tostring(why), 7)
+    end
+  end
+end
+
 omsi.on("key", function(key, down)
   if not down or not enabled then return end
-  if key == "F7" and cfg("show_status", true) then
+  if key == "F5" then
+    dispatch_default_duty()
+  elseif key == "F7" and cfg("show_status", true) then
     local s = snapshot()
     toast(string.format("%s | %s | %d XP | Nota %d | Linha %s | Viagem %s | %.0f km/h | atraso %ds",
       s.player, career.rank, career.xp, career.score, s.line, s.trip, s.speed, math.floor(s.delay)), 8)
@@ -251,8 +295,31 @@ omsi.on("lan_message", function(from, raw)
   if type(raw) ~= "string" or #raw > 120 then return end
   local ok, e = pcall(omsi.json.decode, raw)
   if not ok or type(e) ~= "table" or e.v ~= 1 or type(e.k) ~= "string" then return end
-  if not ({ duty = true, arrive = true, depart = true, crash = true, speed = true })[e.k] then return end
 
+  if e.k == "dispatch" then
+    if tonumber(from) ~= 1 or not is_host or cfg("auto_accept_dispatch", true) ~= true then
+      -- Apenas o host pode emitir comandos de despacho; clientes podem optar por não os aceitar.
+      if tonumber(from) ~= 1 or is_host then return end
+    end
+    local line = type(e.l) == "string" and e.l:gsub("|", ""):sub(1, 20) or ""
+    local tour = type(e.t) == "string" and e.t:gsub("|", ""):sub(1, 20) or ""
+    if line == "" or tour == "" then return end
+    local min_score = tonumber(cfg("dispatch_minimum_score", 50)) or 50
+    if career.score < min_score then
+      toast("Despacho recusado: sua nota está abaixo do mínimo da empresa.", 7)
+      return
+    end
+    local ok_start, why = pcall(omsi.duty.start, line, tour)
+    if ok_start then
+      toast("Despacho recebido: linha " .. line .. ", viagem " .. tour, 7)
+      record("dispatch", { line = line, tour = tour })
+    else
+      toast("Falha ao iniciar despacho: " .. tostring(why), 7)
+    end
+    return
+  end
+
+  if not ({ duty = true, arrive = true, depart = true, crash = true, speed = true })[e.k] then return end
   if type(e.i) ~= "string" or #e.i > 24 then return end
 
   if is_host and cfg("host_authoritative", true) then
