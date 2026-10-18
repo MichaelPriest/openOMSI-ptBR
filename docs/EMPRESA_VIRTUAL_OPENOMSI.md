@@ -1,37 +1,39 @@
-# Empresa Virtual openOMSI — arquitetura local
+# Empresa Virtual openOMSI — agente configurável por regras
 
-## Decisões confirmadas
-- Sem portal web e sem banco de dados online.
-- Multiplayer nativo do openOMSI; conexão externa por VPN privada (por exemplo, Tailscale ou Radmin VPN).
-- Modelo de IA instalado no computador do host, inicialmente através da API local do Ollama.
-- Cada computador mantém registros locais; o host atribui a sequência oficial dos eventos da sessão.
-- O plugin nunca executa ações de jogo recebidas do modelo. A IA produz recomendações em texto; automatização decisória fica para uma fase posterior com regras determinísticas.
+## Decisões
+- Sem portal web, sem banco de dados online e sem dependência obrigatória de IA/modelo local.
+- O “Agente de Operações” começa como um motor de regras determinísticas configuráveis no painel de configurações nativo do openOMSI.
+- Multiplayer nativo através de VPN privada. Cada instalação mantém os seus dados locais.
+- O host pode ser configurado como autoridade dos registros de sessão; isto não equivale a um sistema anti-fraude ou a uma replicação transacional.
 
-## API pública verificada
-Base de referência: tag oficial `v0.3.37`, `docs/PLUGINS.md` e `docs/plugin-api.json`.
+## Configurações incluídas
+- Ativar/desativar a Empresa Virtual; nome da empresa; mostrar status; registrar eventos.
+- Sincronização de eventos multiplayer e autoridade do host.
+- Alertas de excesso de velocidade, tolerância, intervalo de repetição.
+- Alertas de atraso, limiar normal e limiar crítico.
+- Registrar/alertar colisões e valor de penalidade de referência.
+- Pesos configuráveis para pontualidade, segurança e qualidade do serviço, além de pontuação mínima recomendada.
 
-O plugin usa somente interfaces documentadas: `omsi.plugin.settings`, `omsi.lan.me/active/send`, eventos `duty_start`, `stop_arrive`, `stop_depart`, `crash`, `lan_message`, `omsi.storage`, `omsi.json`, `omsi.send`, `omsi.plugin.read`, `omsi.ui.toast` e `omsi.game.notify`. O envio UDP do jogo é apenas para `127.0.0.1`; ele não é usado para comunicar entre jogadores.
+Os pesos de avaliação estão preparados para o sistema de carreira/avaliação que será implementado na próxima fase; por enquanto, não geram uma nota final nem promovem/rebaixam automaticamente um motorista. Penalidades são apenas informativas e não alteram a carreira ou dinheiro ainda.
 
-O canal multiplayer tem limite documentado de 120 caracteres por mensagem e cerca de 10 mensagens/segundo. O plugin valida o tamanho e não envia o caractere `|`. O host recebe os eventos dos clientes, atribui sequência e retransmite; os clientes aceitam apenas eventos numerados pelo host. O formato é compacto para manter mensagens pequenas; eventos de parada enviam o ID da parada em vez do nome para reduzir o tamanho e evitar cortes de texto Unicode. A sincronização é por eventos, não replicação de todos os arquivos.
+## API pública usada
+Referência: openOMSI oficial v0.3.37, `docs/PLUGINS.md` e `docs/plugin-api.json`.
+- `omsi.plugin.settings` e evento `setting` para opções persistentes.
+- `omsi.info`, `omsi.duty.get`, `omsi.bus.state`, `omsi.map.speed_limit` para observar o estado do jogo.
+- Eventos `duty_start`, `stop_arrive`, `stop_depart`, `crash`, `lan_message`.
+- `omsi.storage` para dados locais, `omsi.lan.me/active/send` para sessão multiplayer, `omsi.ui.toast` e `omsi.game.notify` para avisos.
+- A documentação limita mensagens LAN a 120 caracteres e aproximadamente 10 por segundo; cada evento é compacto e pode não ser sincronizado se exceder o limite.
+- UDP `omsi.send` e agente Ollama não são necessários para as regras locais.
 
-## Arquivos e responsabilidades
-- `plugins/empresa_virtual/main.lua`: coleta eventos, salva até 300 eventos recentes por instalação, sincroniza eventos da sessão e envia estado periódico ao agente local apenas no host.
-- `tools/empresa_virtual_ai.py`: processo Python local; recebe UDP de loopback, chama o Ollama em loopback e grava uma recomendação em `agent-inbox.json`, na pasta do plugin.
-- `agent-inbox.json`: arquivo de troca local host-agente. Não deve ser compartilhado nem conter segredos.
-- `omsi.storage`: armazenamento nativo por instalação para eventos e sequência.
+## Instalação e operação
+1. Instale a build do openOMSI que corresponde à API usada.
+2. Copie `plugins/empresa_virtual/main.lua` para `plugins/empresa_virtual/main.lua` dentro da raiz de conteúdo reconhecida pelo jogo.
+3. Abra as configurações do plugin no jogo e ajuste as regras. O host e os clientes precisam instalar a mesma versão do plugin.
+4. F7 mostra o status; F6 salva os registros locais.
 
-## Instalação inicial
-1. Use uma build oficial de openOMSI que contenha a API da tag alvo. O branch deste repositório ainda não incorpora o motor oficial completo; não é uma build pronta do simulador 0.3.37.
-2. Copie `plugins/empresa_virtual/main.lua` para `<raiz de conteúdo>/plugins/empresa_virtual/main.lua`.
-3. No host, instale Python 3.10+ e Ollama; baixe um modelo local adequado, por exemplo `ollama pull qwen2.5:3b`.
-4. Execute o agente com `python tools/empresa_virtual_ai.py --plugin-dir "CAMINHO\para\plugins\empresa_virtual"`. O Ollama deve estar ativo no mesmo computador.
-5. Nas configurações do plugin, habilite a Empresa Virtual. No host, marque "Ativar IA local neste host" nas configurações do plugin. A configuração é independente do papel de host multiplayer; o agente só recebe estado quando a instalação também é o host da sessão. F7 mostra o resumo; F6 salva os registros.
-6. Conecte os jogadores à mesma sessão multiplayer através de uma VPN privada. Todos precisam instalar o mesmo plugin.
-
-## Limitações conhecidas / próxima fase
-- A API multiplayer expõe nomes, posição e estado básico de jogadores; não garante que todos tenham mapas, ônibus ou arquivos idênticos.
-- Mensagens de 120 caracteres não são adequadas para replicar arquivos grandes. O protocolo sincroniza eventos compactos.
-- A sequência do host evita duplicação simples, mas não resolve reconciliação após quedas, host migration, adulteração deliberada nem conflitos de arquivos. Exportação/importação e snapshot/recuperação precisam ser implementados antes de chamar a persistência de resiliente.
-- O plugin não pode receber UDP diretamente pela API; o agente usa um arquivo de entrada local para devolver recomendações ao plugin. Testar permissões e comportamento real de leitura do arquivo no binário-alvo ainda é obrigatório.
-- O plugin e o agente não foram executados no simulador nesta etapa. Não declarar a funcionalidade validada em jogo até realizar teste multiplayer real.
-- Próximas entregas: painel nativo de operações, protocolo de sincronização com checksum/ack/replay, cadastro local de empresa/cargos/frota, motor determinístico de escalas, integração IA com timeout e testes de falha/offline.
+## Limitações e próximos passos
+- O código foi escrito contra a documentação pública; ainda precisa de execução real na versão-alvo para validar assinaturas e renderização de configurações.
+- A sincronização inicial não tem ACK/retry, transferência de snapshot, migração de host ou reconciliação robusta após desconexão.
+- A API LAN não garante integridade nem autenticidade dos clientes; não use os registros como anti-cheat forte.
+- Os pesos de avaliação e a pontuação mínima ainda não são aplicados a uma nota calculada. Próxima fase: cadastro local de empresa, cargos e motoristas; score de condução com métricas disponíveis; escala e despacho por regras; sincronização com confirmação, replay e exportação/backup.
+- O motor de regras não usa serviços pagos, conexão à internet ou modelo de IA. A arquitetura poderá aceitar uma IA opcional no futuro, sem torná-la necessária para jogar.
