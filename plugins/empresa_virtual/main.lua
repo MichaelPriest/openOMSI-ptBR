@@ -49,6 +49,9 @@ career.completed_stops = tonumber(career.completed_stops) or 0
 local seq = tonumber(omsi.storage.get("event_seq")) or 0
 local pending_events = omsi.storage.get("pending_events") or {}
 local company_roster = omsi.storage.get("company_roster") or {}
+-- Idade em segundos locais desde a última atualização de perfil recebida.
+-- Intencionalmente volátil: não transforma estado antigo persistido em presença atual.
+local profile_age = {}
 local pending_dispatches = omsi.storage.get("pending_dispatches") or {}
 local dispatch_seq = tonumber(omsi.storage.get("dispatch_seq")) or 0
 local driver_role = tostring(cfg("driver_role", "Motorista"))
@@ -141,6 +144,7 @@ local function send_profile()
     name = tostring(name or "Host")
     local profile = company_roster[name] or {}
     profile.role, profile.line, profile.tour, profile.active = driver_role, line, tour, active == 1
+    profile_age[name] = 0
     profile.xp, profile.score = career.xp, career.score
     company_roster[name] = profile
     persist()
@@ -267,7 +271,15 @@ render_roster = function()
     local speed = tonumber(p.speed) or 0
     local profile = company_roster[name] or {}
     local role = normalized_role(profile.role)
-    local status = profile.active == true and "EM SERVIÇO" or "DISPONÍVEL"
+    local age = profile_age[name]
+    local status
+    if age == nil or age > 25 then
+      status = "SEM ATUALIZAÇÃO"
+    elseif profile.active == true then
+      status = "EM SERVIÇO"
+    else
+      status = "DISPONÍVEL"
+    end
     children[#children + 1] = { type = "row", children = {
       { type = "text", text = name .. " · " .. role, grow = true },
       { type = "badge", text = status },
@@ -354,6 +366,7 @@ omsi.on("start", function()
 end)
 
 omsi.every(5, function()
+  for name, age in pairs(profile_age) do profile_age[name] = (tonumber(age) or 0) + 5 end
   if roster_visible then render_roster() end
   if not is_host or not omsi.lan.active() then return end
   for dispatch_id, pending in pairs(pending_dispatches) do
@@ -506,6 +519,7 @@ omsi.on("lan_message", function(from, raw)
     profile.active = tonumber(e.a) == 1
     local session_info = omsi.info() or {}
     profile.last_seen = tonumber(session_info.clock) or 0
+    profile_age[name] = 0
     profile.xp = tonumber(profile.xp) or 0
     profile.score = tonumber(profile.score) or 100
     company_roster[name] = profile
@@ -529,6 +543,7 @@ omsi.on("lan_message", function(from, raw)
     profile.line = type(e.l) == "string" and e.l:sub(1, 12) or ""
     profile.tour = type(e.t) == "string" and e.t:sub(1, 12) or ""
     profile.active = tonumber(e.a) == 1
+    profile_age[name] = 0
     company_roster[name] = profile
     persist()
     if roster_visible then render_roster() end
