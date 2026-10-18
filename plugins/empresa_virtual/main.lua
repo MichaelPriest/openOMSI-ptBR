@@ -55,6 +55,7 @@ local last_delay_level = 0
 local is_host = false
 local my_id = 0
 local roster_visible = false
+local render_roster
 
 local function persist()
   while #events > 300 do table.remove(events, 1) end
@@ -218,7 +219,7 @@ local function snapshot()
   }
 end
 
-local function render_roster()
+render_roster = function()
   if not (omsi.ui and omsi.ui.set) then return end
   local map_info = omsi.info() or {}
   local children = {
@@ -320,7 +321,8 @@ omsi.on("start", function()
   my_id, _, is_host = omsi.lan.me()
   is_host = is_host == true
   update_rank()
-  local own_name = player_name_for_id(my_id) or "Motorista"
+  local _, session_name = omsi.lan.me()
+  local own_name = tostring(session_name or "Motorista")
   company_roster[own_name] = company_roster[own_name] or { role = driver_role, xp = career.xp, score = career.score }
   company_roster[own_name].role = driver_role
   company_roster[own_name].xp = career.xp
