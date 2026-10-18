@@ -271,6 +271,14 @@ local function dispatch_default_duty()
     return
   end
 
+  -- Valida a disponibilidade do host antes de transmitir, para não deixar
+  -- clientes numa escala diferente da que o host consegue iniciar.
+  local current = omsi.duty.get() or {}
+  if current.line ~= nil or current.tour ~= nil or current.trip ~= nil then
+    toast("Despacho cancelado: você já está em uma escala. Termine-a antes de despachar outra.", 8)
+    return
+  end
+
   if omsi.lan.active() then
     local players = omsi.lan.players() or {}
     local sent, send_result, send_reason = pcall(omsi.lan.send, 0, payload)
@@ -279,13 +287,6 @@ local function dispatch_default_duty()
       return
     end
     toast("Despacho enviado: linha " .. line .. ", viagem " .. tour .. " (" .. tostring(#players + 1) .. " jogadores na sessão).", 7)
-  end
-
-  -- Não interrompe silenciosamente uma escala que o host já esteja executando.
-  local current = omsi.duty.get() or {}
-  if current.line ~= nil or current.tour ~= nil or current.trip ~= nil then
-    toast("Despacho enviado, mas sua escala atual foi mantida. Termine-a ou encerre-a antes de iniciar outra.", 8)
-    return
   end
 
   local called, start_result, start_reason = pcall(omsi.duty.start, line, tour)
