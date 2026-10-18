@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "plugins/empresa_virtual/**"
+      - "tests/empresa_virtual_smoke.lua"
       - ".github/workflows/empresa-virtual-package.yml"
 jobs:
   package:
