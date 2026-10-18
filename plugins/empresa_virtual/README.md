@@ -33,9 +33,9 @@ Não substitua arquivos do jogo nem instale dentro de `crates/`.
 
 ## Diagnóstico
 - `modo=solo-offline`: carreira local habilitada; multiplayer não confirmado pela API.
-- Os atalhos padrão são `Ctrl+Alt+KeyM` (motoristas), `Ctrl+Alt+KeyD` (despacho), `Ctrl+Alt+KeyP` (status) e `Ctrl+Alt+KeyS` (salvar). Podem ser alterados no painel de configurações.
-- Se a API de atalhos com modificadores não existir, o plugin não sequestra teclas F* conhecidas; use os botões do painel quando a API visual existir.
-- A verificação de conflito compara os atalhos configurados com os bindings que o openOMSI expõe. Não pode detectar todos os atalhos de mods externos.
+- Os atalhos padrão agora são `F4` (motoristas), `F5` (despacho), `F6` (salvar) e `F7` (status), para evitar conflitos observados entre `Ctrl+Alt+M` e `Ctrl+M`. As teclas F só são registradas se a API de bindings não indicar conflito; se já estiverem ocupadas, a ação fica sem atalho e o motivo é registrado/avisado. Os quatro valores antigos `Ctrl+Alt+KeyM/D/P/S` são migrados para os novos padrões. Os atalhos podem ser alterados nas configurações.
+- Se a API nativa de atalhos não existir, o plugin não captura teclas F por conta própria; use os botões do painel quando a API visual existir. Quando a API existe, F4–F7 são registrados somente após consulta aos bindings expostos pela build.
+- A verificação de conflito compara os atalhos configurados com os bindings que o openOMSI expõe. Não pode detectar todos os atalhos de mods externos; teste em jogo e escolha outra tecla nas configurações se necessário.
 - `painel nativo de configurações`: se ausente, os valores padrão são usados; a configuração editável por interface ainda depende de suporte da build.
 - A documentação base de `docs/PLUGINS.md` descreve `omsi.info`, `omsi.on`, `omsi.every`, `omsi.data` e `omsi.message`, mas não documenta painéis customizados, atalhos com modificadores ou início programático de escala. Nessas builds, carreira e mensagens podem funcionar, enquanto painel clicável, atalhos Ctrl+Alt, despacho automático e multiplayer ficam indisponíveis até a build expor as APIs correspondentes.
 - O evento documentado `duty` e a mudança `next_stop` são usados como compatibilidade para registrar escala e progressão quando eventos mais específicos não existem.
