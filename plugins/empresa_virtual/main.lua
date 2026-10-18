@@ -825,7 +825,10 @@ local function award_completed_stop(stop, delay, source)
   local info = omsi.info() or {}
   local duty = omsi.duty.get() or {}
   local actual_delay = tonumber(delay) or tonumber(info.delay) or 0
-  local signature = tostring(duty.line or info.line or "—") .. "|" .. tostring(duty.tour or info.tour or "—")
+  local duty_signature = tostring(duty.line or info.line or "—") .. "|" .. tostring(duty.tour or info.tour or "—")
+  -- Deduplicamos a mesma parada, não quaisquer duas paradas rápidas na mesma escala.
+  local stop_signature = tostring(stop or "—"):lower():gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  local signature = duty_signature .. "|" .. stop_signature
   if signature == last_stop_award_signature and plugin_elapsed_seconds - last_stop_award_tick <= 2 then
     omsi.log("Empresa Virtual: conclusão duplicada de parada ignorada (" .. tostring(stop or "—") .. ", origem=" .. tostring(source) .. ")")
     return
@@ -861,7 +864,7 @@ omsi.on("stop_arrive", function(name, id, number, delay)
 end)
 
 omsi.on("stop_depart", function(name, id, number, delay)
-  award_completed_stop(id or name, delay, "stop_depart")
+  award_completed_stop(name or id, delay, "stop_depart")
 end)
 
 omsi.on("crash", function(energy, speed)
