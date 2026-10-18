@@ -443,6 +443,11 @@ omsi.on("setting", function(key, value)
     if render_dashboard then render_dashboard() end
   end
   if key == "enabled" then enabled = value == true end
+  if key == "promotion_xp_driver" or key == "promotion_xp_senior" or key == "promotion_xp_instructor" then
+    -- Atualiza a patente imediatamente quando o jogador muda as regras de carreira.
+    update_rank()
+    if career_visible and render_career then render_career() end
+  end
   if key == "company_name" then company_name = tostring(value or "Viação Virtual") end
   if key == "driver_role" then
     driver_role = normalized_role(value)
