@@ -33,7 +33,7 @@ Referência: openOMSI oficial v0.3.37, `docs/PLUGINS.md` e `docs/plugin-api.json
 
 ## Limitações e próximos passos
 - O código foi escrito contra a documentação pública; ainda precisa de execução real na versão-alvo para validar assinaturas e renderização de configurações.
-- A sincronização inicial não tem ACK/retry, transferência de snapshot, migração de host ou reconciliação robusta após desconexão.
-- A API LAN não garante integridade nem autenticidade dos clientes; não use os registros como anti-cheat forte.
+- A sincronização atual inclui um identificador local por evento e evita duplicar no cliente o evento que volta do host. Ainda não tem ACK/retry, transferência de snapshot, migração de host ou reconciliação robusta após desconexão.
+- A API LAN não garante integridade nem autenticidade dos clientes; não use os registros como anti-cheat forte. A deduplicação reduz duplicatas acidentais, mas não substitui ACK, replay e validação anti-fraude.
 - Os pesos de avaliação e a pontuação mínima ainda não são aplicados a uma nota calculada. Próxima fase: cadastro local de empresa, cargos e motoristas; score de condução com métricas disponíveis; escala e despacho por regras; sincronização com confirmação, replay e exportação/backup.
 - O motor de regras não usa serviços pagos, conexão à internet ou modelo de IA. A arquitetura poderá aceitar uma IA opcional no futuro, sem torná-la necessária para jogar.
