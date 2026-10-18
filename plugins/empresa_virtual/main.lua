@@ -128,10 +128,23 @@ end
 
 local function send_profile()
   if not (omsi.lan.active() and cfg("sync_multiplayer", true) == true) then return end
-  local payload = omsi.json.encode({ v = 1, k = "profile", r = driver_role })
+  local duty = omsi.duty.get() or {}
+  local line = tostring(duty.line or ""):gsub("|", ""):sub(1, 12)
+  local tour = tostring(duty.tour or duty.trip or ""):gsub("|", ""):sub(1, 12)
+  local active = (duty.line ~= nil or duty.tour ~= nil or duty.trip ~= nil) and 1 or 0
+  local payload = omsi.json.encode({ v = 1, k = "profile", r = driver_role, l = line, t = tour, a = active })
   if #payload <= 120 and not payload:find("|", 1, true) then
-    local destination = is_host and 0 or 1
-    pcall(omsi.lan.send, destination, payload)
+    if is_host then
+      local _, name = omsi.lan.me()
+      name = tostring(name or "Host")
+      local profile = company_roster[name] or {}
+      profile.role, profile.line, profile.tour, profile.active = driver_role, line, tour, active == 1
+      profile.xp, profile.score = career.xp, career.score
+      company_roster[name] = profile
+      persist()
+    else
+      pcall(omsi.lan.send, 1, payload)
+    end
   end
 end
 
@@ -250,8 +263,10 @@ render_roster = function()
     local speed = tonumber(p.speed) or 0
     local profile = company_roster[name] or {}
     local role = normalized_role(profile.role)
+    local status = profile.active == true and "EM SERVIÇO" or "DISPONÍVEL"
     children[#children + 1] = { type = "row", children = {
       { type = "text", text = name .. " · " .. role, grow = true },
+      { type = "badge", text = status },
       { type = "text", text = line .. "/" .. tour, color = "#9CA3AF" },
       { type = "badge", text = string.format("%.0f", speed) },
     } }
@@ -462,6 +477,10 @@ omsi.on("lan_message", function(from, raw)
     local role = normalized_role(e.r)
     local profile = company_roster[name] or {}
     profile.role = role
+    profile.line = type(e.l) == "string" and e.l:sub(1, 12) or ""
+    profile.tour = type(e.t) == "string" and e.t:sub(1, 12) or ""
+    profile.active = tonumber(e.a) == 1
+    profile.last_seen = tonumber(omsi.info().clock) or 0
     profile.xp = tonumber(profile.xp) or 0
     profile.score = tonumber(profile.score) or 100
     company_roster[name] = profile
@@ -554,7 +573,7 @@ omsi.every(2, evaluate_rules)
 
 -- Reenvia eventos ainda sem confirmação do host, com limite de uma tentativa por ciclo.
 -- A fila fica persistida para sobreviver a recargas do plugin e desconexões temporárias.
-omsi.every(30, function()
+omsi.every(10, function()
   if enabled then send_profile() end
 end)
 
@@ -563,10 +582,12 @@ omsi.every(5, function()
   if #pending_events == 0 then return end
   -- Rotaciona a fila: um evento sem ACK não bloqueia os eventos seguintes.
   local event = table.remove(pending_events, 1)
-  local sent = send_pending_event(event)
+  -- Reinsere e persiste antes de enviar, evitando perder um ACK que chegue
+  -- imediatamente enquanto o evento ainda não voltou para a fila.
   pending_events[#pending_events + 1] = event
+  persist()
+  local sent = send_pending_event(event)
   if not sent then
     omsi.log("Empresa Virtual: aguardando confirmação do evento " .. tostring(event.i))
   end
-  persist()
 end)
