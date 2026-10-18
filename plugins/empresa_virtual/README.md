@@ -21,19 +21,21 @@ Plugin Lua independente com carreira, XP/pontuação, cargos, cadastro de motori
 2. Na raiz de conteúdo reconhecida pelo jogo, crie `plugins/empresa_virtual/`.
 3. Copie todos os arquivos deste diretório para essa pasta. `main.lua` e `compat.lua` devem ficar lado a lado.
 4. Inicie o jogo e confira `game.log`; procure `Empresa Virtual compat` e o modo detectado.
-5. Se a build oferecer o painel nativo de configurações do plugin, configure as opções por ele. Em builds antigas sem essa API, o plugin usa os valores padrão e registra essa limitação no log.
+5. Abra as configurações nativas da Empresa Virtual para editar empresa, regras e atalhos. O painel em jogo tem botões para Motoristas, Despachar, Status, Salvar e Configurar.
 
 Não substitua arquivos do jogo nem instale dentro de `crates/`.
 
 ## Ideias incorporadas dos projetos relacionados
 
 - **OMSI-Compatible-Runtime:** detecção por capacidade, compatibilidade em camadas e diagnóstico explícito por recurso, sem presumir que uma API existe em todas as versões.
-- **OMSI-NavBR-Multiplayer:** painel de operação, atalhos e fluxos de despacho inspirados na experiência de HUD/CCO. Os atalhos atuais F4/F5/F6/F7 ainda precisam de uma camada configurável com verificação de conflito; não são considerados livres em todas as instalações.
+- **OMSI-NavBR-Multiplayer:** painel de operação no jogo, botões para motoristas/despacho/status/salvamento/configurações e atalhos editáveis nas configurações nativas do plugin. Os atalhos padrão usam combinações Ctrl+Alt; a rotina consulta os bindings do jogo quando a API existe e evita registrar um conflito exato. Isso não garante que não haja conflito com todos os mods externos.
 - **Agente de Operações:** regras locais configuráveis para segurança, pontualidade, pontuação, promoções e despacho. O núcleo não depende de IA externa nem de serviço pago.
 
 ## Diagnóstico
 - `modo=solo-offline`: carreira local habilitada; multiplayer não confirmado pela API.
-- `painel visual não disponível`: a build não oferece a API de painéis; os alertas tentam usar as mensagens nativas.
+- Os atalhos padrão são `Ctrl+Alt+KeyM` (motoristas), `Ctrl+Alt+KeyD` (despacho), `Ctrl+Alt+KeyP` (status) e `Ctrl+Alt+KeyS` (salvar). Podem ser alterados no painel de configurações.
+- Se a API de atalhos com modificadores não existir, o plugin não sequestra teclas F* conhecidas; use os botões do painel quando a API visual existir.
+- A verificação de conflito compara os atalhos configurados com os bindings que o openOMSI expõe. Não pode detectar todos os atalhos de mods externos.
 - `painel nativo de configurações`: se ausente, os valores padrão são usados; a configuração editável por interface ainda depende de suporte da build.
 - Falhas de API opcionais não devem impedir a carreira local.
 - `OMSI_NO_PLUGINS=1` desativa plugins Lua.
