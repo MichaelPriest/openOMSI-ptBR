@@ -2,6 +2,7 @@
 -- Run from the repository root: lua5.4 tests/empresa_virtual_smoke.lua
 local callbacks, timers, logs = {}, {}, {}
 local data = {}
+local duty_start_calls = 0
 
 omsi = {
   version = "test-runtime",
@@ -35,7 +36,7 @@ omsi = {
   },
   duty = {
     get = function() return { line = "136", tour = "3", trip = "3", delay = 0 } end,
-    start = function() return true end,
+    start = function() duty_start_calls = duty_start_calls + 1; return true end,
   },
   bus = { state = function() return { speed = 0 } end },
   map = { speed_limit = function() return 50 end },
@@ -70,6 +71,7 @@ assert(callbacks.start and #callbacks.start > 0, "plugin must register start eve
 emit("start")
 assert(data.empresa_virtual_career ~= nil, "career must persist locally at startup")
 
+-- The host must not start a second duty when one is already active.\nemit("ui_click", "empresa_virtual_dashboard", "ev_dispatch")\nassert(duty_start_calls == 0, "dispatch must refuse when the driver already has an active duty")\n
 -- The old and new duty event names must not create two career records.
 emit("duty", "136", "3")
 emit("duty_start", "136", "3")
