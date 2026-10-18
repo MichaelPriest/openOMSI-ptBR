@@ -3,6 +3,7 @@
 local settings = omsi.plugin.settings({
   { key = "enabled", type = "bool", label = "Ativar Empresa Virtual", default = true },
   { key = "company_name", type = "text", label = "Nome da empresa", default = "Viação Virtual" },
+  { key = "driver_role", type = "text", label = "Cargo do motorista neste computador", default = "Motorista" },
   { key = "show_status", type = "bool", label = "Mostrar status ao pressionar F7", default = true },
   { key = "save_events", type = "bool", label = "Registrar eventos e viagens", default = true },
   { key = "sync_multiplayer", type = "bool", label = "Sincronizar eventos pelo multiplayer", default = true },
@@ -47,6 +48,8 @@ career.score = math.max(0, math.min(100, tonumber(career.score) or 100))
 career.completed_stops = tonumber(career.completed_stops) or 0
 local seq = tonumber(omsi.storage.get("event_seq")) or 0
 local pending_events = omsi.storage.get("pending_events") or {}
+local company_roster = omsi.storage.get("company_roster") or {}
+local driver_role = tostring(cfg("driver_role", "Motorista"))
 local last_speed_warning = -100000
 local last_delay_level = 0
 local is_host = false
@@ -58,6 +61,7 @@ local function persist()
   omsi.storage.set("events", events)
   omsi.storage.set("event_seq", seq)
   omsi.storage.set("pending_events", pending_events)
+  omsi.storage.set("company_roster", company_roster)
 end
 
 local function send_pending_event(event)
@@ -87,6 +91,47 @@ local toast
 
 local function save_career()
   omsi.storage.set("career", career)
+end
+
+local allowed_roles = {
+  ["Aprendiz"] = true,
+  ["Motorista"] = true,
+  ["Motorista Sênior"] = true,
+  ["Instrutor"] = true,
+  ["Despachante"] = true,
+  ["Supervisor"] = true,
+  ["Administrador"] = true,
+}
+
+local function normalized_role(value)
+  value = tostring(value or "Motorista")
+  if allowed_roles[value] then return value end
+  return "Motorista"
+end
+
+driver_role = normalized_role(driver_role)
+
+local function player_name_for_id(id)
+  if tonumber(id) == 1 then
+    local _, name = omsi.lan.me()
+    return tostring(name or "Host")
+  end
+  local players = omsi.lan.players() or {}
+  for _, player in ipairs(players) do
+    if tonumber(player.id) == tonumber(id) then
+      return tostring(player.name or ("Jogador " .. tostring(id)))
+    end
+  end
+  return nil
+end
+
+local function send_profile()
+  if not (omsi.lan.active() and cfg("sync_multiplayer", true) == true) then return end
+  local payload = omsi.json.encode({ v = 1, k = "profile", r = driver_role })
+  if #payload <= 120 and not payload:find("|", 1, true) then
+    local destination = is_host and 0 or 1
+    pcall(omsi.lan.send, destination, payload)
+  end
 end
 
 local function adjust_score(delta)
@@ -190,7 +235,7 @@ local function render_roster()
     { type = "text", text = tostring(own.player) .. " (você)", weight = "bold", grow = true },
     { type = "badge", text = string.format("%.0f km/h", own.speed) },
   } }
-  children[#children + 1] = { type = "text", text = "Linha " .. own.line .. " • Viagem " .. own.tour .. " • Nota " .. tostring(math.floor(career.score)) .. " • " .. career.rank, size = 11, color = "#D1D5DB" }
+  children[#children + 1] = { type = "text", text = "Cargo: " .. driver_role .. " • Linha " .. own.line .. " • Viagem " .. own.tour .. " • Nota " .. tostring(math.floor(career.score)), size = 11, color = "#D1D5DB" }
 
   local players = {}
   if omsi.lan.active() then players = omsi.lan.players() or {} end
@@ -202,8 +247,10 @@ local function render_roster()
     local line = tostring(p.line or "—")
     local tour = tostring(p.tour or "—")
     local speed = tonumber(p.speed) or 0
+    local profile = company_roster[name] or {}
+    local role = normalized_role(profile.role)
     children[#children + 1] = { type = "row", children = {
-      { type = "text", text = name, grow = true },
+      { type = "text", text = name .. " · " .. role, grow = true },
       { type = "text", text = line .. "/" .. tour, color = "#9CA3AF" },
       { type = "badge", text = string.format("%.0f", speed) },
     } }
@@ -261,12 +308,25 @@ omsi.on("setting", function(key, value)
   settings[key] = value
   if key == "enabled" then enabled = value == true end
   if key == "company_name" then company_name = tostring(value or "Viação Virtual") end
+  if key == "driver_role" then
+    driver_role = normalized_role(value)
+    settings.driver_role = driver_role
+    send_profile()
+    if roster_visible then render_roster() end
+  end
 end)
 
 omsi.on("start", function()
   my_id, _, is_host = omsi.lan.me()
   is_host = is_host == true
   update_rank()
+  local own_name = player_name_for_id(my_id) or "Motorista"
+  company_roster[own_name] = company_roster[own_name] or { role = driver_role, xp = career.xp, score = career.score }
+  company_roster[own_name].role = driver_role
+  company_roster[own_name].xp = career.xp
+  company_roster[own_name].score = career.score
+  persist()
+  send_profile()
   render_roster()
   omsi.game.notify(company_name .. " carregada. F4: motoristas; F5: despacho; F7: status.", "info", 6)
   omsi.log(company_name .. " iniciada; host=" .. tostring(is_host))
@@ -393,6 +453,21 @@ omsi.on("lan_message", function(from, raw)
   local ok, e = pcall(omsi.json.decode, raw)
   if not ok or type(e) ~= "table" or e.v ~= 1 or type(e.k) ~= "string" then return end
 
+  if e.k == "profile" then
+    if not is_host or tonumber(from) == 1 then return end
+    local name = player_name_for_id(from)
+    if not name then return end
+    local role = normalized_role(e.r)
+    local profile = company_roster[name] or {}
+    profile.role = role
+    profile.xp = tonumber(profile.xp) or 0
+    profile.score = tonumber(profile.score) or 100
+    company_roster[name] = profile
+    persist()
+    if roster_visible then render_roster() end
+    return
+  end
+
   if e.k == "ack" then
     if not is_host and tonumber(from) == 1 and type(e.i) == "string" then
       acknowledge_event(e.i)
@@ -477,6 +552,10 @@ omsi.every(2, evaluate_rules)
 
 -- Reenvia eventos ainda sem confirmação do host, com limite de uma tentativa por ciclo.
 -- A fila fica persistida para sobreviver a recargas do plugin e desconexões temporárias.
+omsi.every(30, function()
+  if enabled then send_profile() end
+end)
+
 omsi.every(5, function()
   if is_host or not enabled or cfg("sync_multiplayer", true) ~= true or not omsi.lan.active() then return end
   if #pending_events == 0 then return end
