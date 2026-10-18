@@ -21,6 +21,8 @@ local function table_at(path)
 end
 
 local function install_fallbacks()
+  local lan_complete = has("lan.active") and has("lan.me") and has("lan.players")
+    and has("lan.send") and has("json.encode") and has("json.decode")
   -- Persistência: usa o armazenamento oficial quando disponível; caso contrário,
   -- utiliza omsi.data, que é a API documentada nas versões básicas.
   if type(omsi.storage) ~= "table" then omsi.storage = {} end
@@ -71,8 +73,6 @@ local function install_fallbacks()
   end
   -- Multiplayer só fica ativo quando sessão, envio e JSON existem juntos.
   -- Uma API parcial não pode fazer o plugin entrar por engano em caminhos de rede.
-  local lan_complete = has("lan.active") and has("lan.me") and has("lan.players")
-    and has("lan.send") and has("json.encode") and has("json.decode")
   if not lan_complete then
     omsi.lan.active = function() return false end
     omsi.lan.me = function() return 0, "Motorista local", false end
@@ -154,19 +154,23 @@ function M.report()
 end
 
 function M.startup()
-  local before = M.detect()
-  install_fallbacks()
   local r = M.detect()
+  install_fallbacks()
+  -- Relatórios mostram APIs nativas da build, não os fallbacks locais instalados.
+  M.capabilities = r.capabilities
+  M.multiplayer = r.multiplayer
+  M.mode = r.mode
+  M.can_run = r.can_run
   if r.can_run then
     if type(omsi.log) == "function" then
       omsi.log(M.report())
       if not r.multiplayer then
         omsi.log("Empresa Virtual: modo local/offline; multiplayer não foi detectado e não será simulado.")
       end
-      if not before.plugin_settings then
+      if not r.capabilities.plugin_settings then
         omsi.log("Empresa Virtual: esta versão não oferece painel nativo de configurações; usando padrões locais.")
       end
-      if not before.ui_panel then
+      if not r.capabilities.ui_panel then
         omsi.log("Empresa Virtual: painel visual não disponível nesta versão; comandos visuais usam mensagens quando possível.")
       end
     end
