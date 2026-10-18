@@ -521,6 +521,12 @@ local function dispatch_default_duty()
     return
   end
 
+  local current_duty = omsi.duty.get() or {}
+  if current_duty.line ~= nil or current_duty.tour ~= nil or current_duty.trip ~= nil then
+    toast("Despacho recusado: você já está em uma escala. Termine-a antes de iniciar outra.", 8)
+    return
+  end
+
   -- Confirma primeiro a escala local do host. Não distribui uma ordem se
   -- o host não conseguiu iniciar a própria viagem.
   local called, start_result, start_reason = pcall(omsi.duty.start, line, tour)
