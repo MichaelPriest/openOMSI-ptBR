@@ -97,6 +97,12 @@ local dispatch_seq = tonumber(omsi.storage.get("dispatch_seq")) or 0
 local driver_role = tostring(cfg("driver_role", "Motorista"))
 local last_speed_warning = -100000
 local last_delay_level = 0
+-- Relógio monotônico para deduplicar eventos equivalentes entre versões.
+local plugin_elapsed_seconds = 0
+local last_stop_award_tick = -100000
+local last_stop_award_signature = nil
+local last_duty_event_tick = -100000
+local last_duty_event_signature = nil
 local is_host = false
 local my_id = 0
 local roster_visible = false
@@ -460,6 +466,7 @@ omsi.on("start", function()
 end)
 
 omsi.every(1, function()
+  plugin_elapsed_seconds = plugin_elapsed_seconds + 1
   if is_host and omsi.lan.active() and #roster_sync_queue > 0 then
     -- No máximo cinco mensagens por segundo, abaixo do limite documentado da API.
     for _ = 1, math.min(5, #roster_sync_queue) do
@@ -704,30 +711,41 @@ omsi.on("key", function(key, down)
   end
 end)
 
-omsi.on("duty_start", function(line, tour)
-  last_delay_level = 0
-  record("duty", { line = line, tour = tour })
-  toast("Escala iniciada: linha " .. tostring(line or "—") .. ", viagem " .. tostring(tour or "—"), 5)
-end)
-
--- API documentada nas builds base (docs/PLUGINS.md): evento "duty".
--- Mantemos "duty_start" para builds que disponibilizam esse evento específico.
-omsi.on("duty", function(line, tour)
+local function handle_duty_started(line, tour)
   if not enabled then return end
+  local signature = tostring(line or "—") .. "|" .. tostring(tour or "—")
+  -- Builds diferentes podem emitir duty_start e duty para a mesma escala.
+  if signature == last_duty_event_signature and plugin_elapsed_seconds - last_duty_event_tick <= 3 then
+    omsi.log("Empresa Virtual: início de escala duplicado ignorado (" .. signature .. ")")
+    return
+  end
+  last_duty_event_signature = signature
+  last_duty_event_tick = plugin_elapsed_seconds
   last_delay_level = 0
   record("duty", { line = line, tour = tour })
   toast("Escala iniciada: linha " .. tostring(line or "—") .. ", viagem " .. tostring(tour or "—"), 5)
-end)
+end
 
--- Compatibilidade com o evento oficial "next_stop" nas builds base.
--- Uma mudança de parada representa conclusão da parada anterior; não inferimos
--- colisões nem eventos que a API não expõe.
-omsi.on("next_stop", function(new_stop, old_stop)
-  if not enabled or new_stop == nil or new_stop == old_stop or old_stop == nil then return end
+omsi.on("duty_start", handle_duty_started)
+omsi.on("duty", handle_duty_started)
+
+-- A mudança de parada e o evento específico de saída podem coexistir.
+-- Recompensamos uma única vez por parada/escala em uma janela de 2 segundos.
+local function award_completed_stop(stop, delay, source)
+  if not enabled then return end
+  local info = omsi.info() or {}
+  local duty = omsi.duty.get() or {}
+  local actual_delay = tonumber(delay) or tonumber(info.delay) or 0
+  local signature = tostring(duty.line or info.line or "—") .. "|" .. tostring(duty.tour or info.tour or "—")
+  if signature == last_stop_award_signature and plugin_elapsed_seconds - last_stop_award_tick <= 2 then
+    omsi.log("Empresa Virtual: conclusão duplicada de parada ignorada (" .. tostring(stop or "—") .. ", origem=" .. tostring(source) .. ")")
+    return
+  end
+  last_stop_award_signature = signature
+  last_stop_award_tick = plugin_elapsed_seconds
+
   career.completed_stops = career.completed_stops + 1
   career.xp = career.xp + math.max(0, tonumber(cfg("xp_per_stop", 10)) or 10)
-  local info = omsi.info() or {}
-  local actual_delay = tonumber(info.delay) or 0
   local warn = math.max(0, tonumber(cfg("delay_warn_seconds", 180)) or 180)
   local critical = math.max(warn, tonumber(cfg("delay_critical_seconds", 600)) or 600)
   local punctuality_weight = math.max(0, tonumber(cfg("punctuality_weight", 40)) or 40) / 40
@@ -740,32 +758,21 @@ omsi.on("next_stop", function(new_stop, old_stop)
   end
   update_rank()
   save_career()
-  record("depart", { stop = old_stop, delay = actual_delay, source = "next_stop" })
+  record("depart", { stop = stop, delay = actual_delay, source = source })
+end
+
+omsi.on("next_stop", function(new_stop, old_stop)
+  if new_stop == nil or new_stop == old_stop or old_stop == nil then return end
+  award_completed_stop(old_stop, nil, "next_stop")
 end)
 
 omsi.on("stop_arrive", function(name, id, number, delay)
+  if not enabled then return end
   record("arrive", { stop = id or name, delay = delay })
 end)
 
 omsi.on("stop_depart", function(name, id, number, delay)
-  local actual_delay = tonumber(delay) or 0
-  career.completed_stops = career.completed_stops + 1
-  career.xp = career.xp + math.max(0, tonumber(cfg("xp_per_stop", 10)) or 10)
-
-  local warn = math.max(0, tonumber(cfg("delay_warn_seconds", 180)) or 180)
-  local critical = math.max(warn, tonumber(cfg("delay_critical_seconds", 600)) or 600)
-  local punctuality_weight = math.max(0, tonumber(cfg("punctuality_weight", 40)) or 40) / 40
-  if actual_delay >= critical then
-    adjust_score(-5 * punctuality_weight)
-  elseif actual_delay >= warn then
-    adjust_score(-2 * punctuality_weight)
-  else
-    adjust_score(math.max(0, tonumber(cfg("punctual_stop_reward", 1)) or 1) * punctuality_weight)
-  end
-
-  update_rank()
-  save_career()
-  record("depart", { stop = id or name, delay = delay })
+  award_completed_stop(id or name, delay, "stop_depart")
 end)
 
 omsi.on("crash", function(energy, speed)
