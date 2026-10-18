@@ -1,0 +1,14 @@
+{
+  "id": "empresa_virtual",
+  "name": "Empresa Virtual",
+  "version": "0.2.0-test",
+  "entry": "main.lua",
+  "runtime": "openOMSI Lua plugin",
+  "reference_api": "openOMSI v0.3.37",
+  "distribution": "copy-directory",
+  "network_required": false,
+  "paid_services_required": false,
+  "online_database_required": false,
+  "runtime_tested_versions": [],
+  "notes": "Capability detection is not proof of runtime compatibility."
+}
