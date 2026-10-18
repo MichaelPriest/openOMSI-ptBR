@@ -52,6 +52,8 @@ local function persist()
   omsi.storage.set("event_seq", seq)
 end
 
+local toast
+
 local function save_career()
   omsi.storage.set("career", career)
 end
@@ -104,7 +106,7 @@ local function record(kind, fields)
   end
 end
 
-local function toast(message, seconds)
+toast = function(message, seconds)
   pcall(function()
     omsi.ui.toast(tostring(message), {
       title = company_name,
