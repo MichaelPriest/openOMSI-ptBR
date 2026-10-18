@@ -127,12 +127,12 @@ end)
 
 omsi.on("stop_arrive", function(name, id, number, delay)
   local d = omsi.duty.get() or {}
-  event_record("arrive", { line = d.line, tour = d.tour, stop = name, delay = delay })
+  event_record("arrive", { line = d.line, tour = d.tour, stop = id, delay = delay })
 end)
 
 omsi.on("stop_depart", function(name, id, number, delay)
   local d = omsi.duty.get() or {}
-  event_record("depart", { line = d.line, tour = d.tour, stop = name, delay = delay })
+  event_record("depart", { line = d.line, tour = d.tour, stop = id, delay = delay })
 end)
 
 omsi.on("crash", function(energy, speed)
