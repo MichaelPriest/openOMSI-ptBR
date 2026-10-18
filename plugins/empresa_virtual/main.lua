@@ -281,7 +281,13 @@ local function dispatch_default_duty()
     toast("Despacho enviado: linha " .. line .. ", viagem " .. tour .. " (" .. tostring(#players + 1) .. " jogadores na sessão).", 7)
   end
 
-  -- O host também recebe a escala; a mensagem LAN alcança somente os outros jogadores.
+  -- Não interrompe silenciosamente uma escala que o host já esteja executando.
+  local current = omsi.duty.get() or {}
+  if current.line ~= nil or current.tour ~= nil or current.trip ~= nil then
+    toast("Despacho enviado, mas sua escala atual foi mantida. Termine-a ou encerre-a antes de iniciar outra.", 8)
+    return
+  end
+
   local called, start_result, start_reason = pcall(omsi.duty.start, line, tour)
   if called and start_result ~= false then
     toast("Despacho aplicado localmente: linha " .. line .. ", viagem " .. tour, 6)
@@ -367,6 +373,11 @@ omsi.on("lan_message", function(from, raw)
     local min_score = tonumber(cfg("dispatch_minimum_score", 50)) or 50
     if career.score < min_score then
       toast("Despacho recusado: sua nota está abaixo do mínimo da empresa.", 7)
+      return
+    end
+    local current = omsi.duty.get() or {}
+    if current.line ~= nil or current.tour ~= nil or current.trip ~= nil then
+      toast("Despacho recusado: você já está em uma escala. Termine-a antes de aceitar outra.", 8)
       return
     end
     local called, start_result, why = pcall(omsi.duty.start, line, tour)
