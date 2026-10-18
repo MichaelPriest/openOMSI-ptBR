@@ -14,6 +14,7 @@
 - Registrar/alertar colisões e valor de penalidade de referência.
 - Pesos configuráveis para pontualidade, segurança e qualidade do serviço, além de pontuação mínima recomendada.
 - Carreira local persistente: XP por parada concluída, níveis Aprendiz/Motorista/Motorista Sênior/Instrutor com limiares editáveis, nota de 0 a 100, recompensa por parada pontual e descontos por atraso, excesso de velocidade e colisão.
+- Despacho inicial de linha/viagem pelo host com F5: linha e tabela padrão configuráveis, aceitação automática opcional nos clientes e nota mínima para aceitar.
 
 A carreira agora calcula XP por parada de saída registada, promove automaticamente conforme os limiares de XP e mantém uma nota local de 0 a 100. A nota considera pontualidade, alertas de velocidade e colisões com os pesos configurados. A API não oferece aqui uma métrica confiável de satisfação dos passageiros; por isso, o peso de qualidade do serviço permanece configurável, mas ainda não entra no cálculo. Não há salário, dinheiro ou rebaixamento automático.
 
@@ -30,11 +31,11 @@ Referência: openOMSI oficial v0.3.37, `docs/PLUGINS.md` e `docs/plugin-api.json
 1. Instale a build do openOMSI que corresponde à API usada.
 2. Copie `plugins/empresa_virtual/main.lua` para `plugins/empresa_virtual/main.lua` dentro da raiz de conteúdo reconhecida pelo jogo.
 3. Abra as configurações do plugin no jogo e ajuste as regras. O host e os clientes precisam instalar a mesma versão do plugin.
-4. F7 mostra o status; F6 salva os registros locais.
+4. F5: o host despacha a linha/viagem configurada; clientes podem desativar a aceitação automática nas opções. F7 mostra o status/carreira; F6 salva os registros locais.
 
 ## Limitações e próximos passos
 - O código foi escrito contra a documentação pública; ainda precisa de execução real na versão-alvo para validar assinaturas e renderização de configurações.
 - A sincronização atual inclui um identificador local por evento e evita duplicar no cliente o evento que volta do host. Ainda não tem ACK/retry, transferência de snapshot, migração de host ou reconciliação robusta após desconexão.
 - A API LAN não garante integridade nem autenticidade dos clientes; não use os registros como anti-cheat forte. A deduplicação reduz duplicatas acidentais, mas não substitui ACK, replay e validação anti-fraude.
-- A carreira e a nota são locais por instalação e ainda não são perfil global multiplayer; a nota mínima configurada é uma referência, não bloqueia escalas. Próxima fase: cadastro de motoristas/cargos mais completo, escalas e despacho por regras, sincronização com confirmação/replay e exportação/backup.
+- A carreira e a nota são locais por instalação e ainda não são perfil global multiplayer. O despacho F5 envia um comando simples para iniciar a mesma linha/tabela em clientes compatíveis; não reserva recursos, não verifica conflito de motoristas e não garante entrega se alguém estiver desconectado. A nota mínima pode impedir despacho/aceitação, mas não controla outras escalas iniciadas pelo menu do jogo. Próxima fase: cadastro de motoristas/cargos mais completo, escalas com disponibilidade/conflitos, sincronização com confirmação/replay e exportação/backup.
 - O motor de regras não usa serviços pagos, conexão à internet ou modelo de IA. A arquitetura poderá aceitar uma IA opcional no futuro, sem torná-la necessária para jogar.
