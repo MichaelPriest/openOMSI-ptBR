@@ -479,8 +479,13 @@ omsi.every(2, evaluate_rules)
 -- A fila fica persistida para sobreviver a recargas do plugin e desconexões temporárias.
 omsi.every(5, function()
   if is_host or not enabled or cfg("sync_multiplayer", true) ~= true or not omsi.lan.active() then return end
-  for _, event in ipairs(pending_events) do
-    send_pending_event(event)
-    break
+  if #pending_events == 0 then return end
+  -- Rotaciona a fila: um evento sem ACK não bloqueia os eventos seguintes.
+  local event = table.remove(pending_events, 1)
+  local sent = send_pending_event(event)
+  pending_events[#pending_events + 1] = event
+  if not sent then
+    omsi.log("Empresa Virtual: aguardando confirmação do evento " .. tostring(event.i))
   end
+  persist()
 end)
