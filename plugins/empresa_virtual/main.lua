@@ -49,6 +49,8 @@ career.completed_stops = tonumber(career.completed_stops) or 0
 local seq = tonumber(omsi.storage.get("event_seq")) or 0
 local pending_events = omsi.storage.get("pending_events") or {}
 local company_roster = omsi.storage.get("company_roster") or {}
+local pending_dispatches = omsi.storage.get("pending_dispatches") or {}
+local dispatch_seq = tonumber(omsi.storage.get("dispatch_seq")) or 0
 local driver_role = tostring(cfg("driver_role", "Motorista"))
 local last_speed_warning = -100000
 local last_delay_level = 0
@@ -63,6 +65,8 @@ local function persist()
   omsi.storage.set("event_seq", seq)
   omsi.storage.set("pending_events", pending_events)
   omsi.storage.set("company_roster", company_roster)
+  omsi.storage.set("pending_dispatches", pending_dispatches)
+  omsi.storage.set("dispatch_seq", dispatch_seq)
 end
 
 local function send_pending_event(event)
@@ -369,36 +373,38 @@ local function dispatch_default_duty()
     return
   end
 
-  local command = { v = 1, k = "dispatch", l = line, t = tour }
-  local payload = omsi.json.encode(command)
-  if #payload > 120 or payload:find("|", 1, true) then
-    toast("Despacho não enviado: dados excedem o limite multiplayer.", 6)
+  -- Confirma primeiro a escala local do host. Não distribui uma ordem se
+  -- o host não conseguiu iniciar a própria viagem.
+  local called, start_result, start_reason = pcall(omsi.duty.start, line, tour)
+  if not called or start_result == false then
+    toast("Não foi possível iniciar a escala do host: " .. tostring(start_reason or start_result), 7)
     return
   end
-
-  -- Valida a disponibilidade do host antes de transmitir, para não deixar
-  -- clientes numa escala diferente da que o host consegue iniciar.
-  local current = omsi.duty.get() or {}
-  if current.line ~= nil or current.tour ~= nil or current.trip ~= nil then
-    toast("Despacho cancelado: você já está em uma escala. Termine-a antes de despachar outra.", 8)
-    return
-  end
+  toast("Escala do host iniciada: linha " .. line .. ", viagem " .. tour, 6)
 
   if omsi.lan.active() then
+    dispatch_seq = dispatch_seq + 1
+    local info = omsi.info() or {}
+    local dispatch_id = tostring(math.floor(tonumber(info.clock) or 0)) .. "-" .. tostring(dispatch_seq)
     local players = omsi.lan.players() or {}
-    local sent, send_result, send_reason = pcall(omsi.lan.send, 0, payload)
-    if not sent or send_result ~= true then
-      toast("Não foi possível enviar o despacho: " .. tostring(send_reason or send_result), 7)
+    pending_dispatches[dispatch_id] = { line = line, tour = tour, expected = #players, accepted = 0, refused = 0, created = tonumber(info.clock) or 0 }
+    persist()
+    local command = { v = 1, k = "dispatch", d = dispatch_id, l = line, t = tour }
+    local payload = omsi.json.encode(command)
+    if #payload > 120 or payload:find("|", 1, true) then
+      pending_dispatches[dispatch_id] = nil
+      persist()
+      toast("Escala iniciada no host, mas o comando excedeu o limite multiplayer.", 7)
       return
     end
-    toast("Despacho enviado: linha " .. line .. ", viagem " .. tour .. " (" .. tostring(#players + 1) .. " jogadores na sessão).", 7)
-  end
-
-  local called, start_result, start_reason = pcall(omsi.duty.start, line, tour)
-  if called and start_result ~= false then
-    toast("Despacho aplicado localmente: linha " .. line .. ", viagem " .. tour, 6)
-  else
-    toast("Não foi possível iniciar a escala: " .. tostring(start_reason or start_result), 7)
+    local sent, send_result, send_reason = pcall(omsi.lan.send, 0, payload)
+    if not sent or send_result ~= true then
+      pending_dispatches[dispatch_id] = nil
+      persist()
+      toast("Escala iniciada no host, mas o despacho não foi enviado: " .. tostring(send_reason or send_result), 7)
+      return
+    end
+    toast("Despacho enviado para " .. tostring(#players) .. " motorista(s). Aguardando confirmações.", 7)
   end
 end
 
@@ -535,10 +541,38 @@ omsi.on("lan_message", function(from, raw)
       return
     end
     local called, start_result, why = pcall(omsi.duty.start, line, tour)
-    if called and start_result ~= false then
+    local accepted = called and start_result ~= false
+    local reason = accepted and "OK" or "ERRO"
+    if accepted then
       toast("Despacho recebido: linha " .. line .. ", viagem " .. tour, 7)
     else
       toast("Falha ao iniciar despacho: " .. tostring(why or start_result), 7)
+    end
+    if type(e.d) == "string" and #e.d <= 20 then
+      local result = omsi.json.encode({ v = 1, k = "dispatch_result", d = e.d, a = accepted and 1 or 0, x = reason })
+      if #result <= 120 and not result:find("|", 1, true) then pcall(omsi.lan.send, 1, result) end
+    end
+    return
+  end
+
+  if e.k == "dispatch_result" then
+    if not is_host or tonumber(from) == 1 or type(e.d) ~= "string" then return end
+    local pending = pending_dispatches[e.d]
+    if not pending then return end
+    local name = player_name_for_id(from) or ("Jogador " .. tostring(from))
+    local result_key = tostring(from)
+    pending.results = pending.results or {}
+    if pending.results[result_key] then return end
+    local accepted = tonumber(e.a) == 1
+    pending.results[result_key] = { name = name, accepted = accepted }
+    if accepted then pending.accepted = (tonumber(pending.accepted) or 0) + 1
+    else pending.refused = (tonumber(pending.refused) or 0) + 1 end
+    persist()
+    toast(name .. (accepted and " aceitou" or " recusou/falhou ao iniciar") .. " a linha " .. tostring(pending.line) .. "/" .. tostring(pending.tour) .. ". Confirmações: " .. tostring((pending.accepted or 0) + (pending.refused or 0)) .. "/" .. tostring(pending.expected or 0), 7)
+    if (pending.accepted or 0) + (pending.refused or 0) >= (pending.expected or 0) then
+      toast("Confirmações do despacho concluídas: " .. tostring(pending.accepted or 0) .. " aceito(s), " .. tostring(pending.refused or 0) .. " recusado(s)/falha(s).", 8)
+      pending_dispatches[e.d] = nil
+      persist()
     end
     return
   end
