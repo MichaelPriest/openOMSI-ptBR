@@ -5,6 +5,7 @@ on:
     paths:
       - "plugins/empresa_virtual/**"
       - "tests/empresa_virtual_smoke.lua"
+      - "tests/empresa_virtual_compat_smoke.lua"
       - ".github/workflows/empresa-virtual-package.yml"
 jobs:
   package:
