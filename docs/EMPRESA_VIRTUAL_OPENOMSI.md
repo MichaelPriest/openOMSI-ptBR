@@ -13,8 +13,9 @@
 - Alertas de atraso, limiar normal e limiar crítico.
 - Registrar/alertar colisões e valor de penalidade de referência.
 - Pesos configuráveis para pontualidade, segurança e qualidade do serviço, além de pontuação mínima recomendada.
+- Carreira local persistente: XP por parada concluída, níveis Aprendiz/Motorista/Motorista Sênior/Instrutor com limiares editáveis, nota de 0 a 100, recompensa por parada pontual e descontos por atraso, excesso de velocidade e colisão.
 
-Os pesos de avaliação estão preparados para o sistema de carreira/avaliação que será implementado na próxima fase; por enquanto, não geram uma nota final nem promovem/rebaixam automaticamente um motorista. Penalidades são apenas informativas e não alteram a carreira ou dinheiro ainda.
+A carreira agora calcula XP por parada de saída registada, promove automaticamente conforme os limiares de XP e mantém uma nota local de 0 a 100. A nota considera pontualidade, alertas de velocidade e colisões com os pesos configurados. A API não oferece aqui uma métrica confiável de satisfação dos passageiros; por isso, o peso de qualidade do serviço permanece configurável, mas ainda não entra no cálculo. Não há salário, dinheiro ou rebaixamento automático.
 
 ## API pública usada
 Referência: openOMSI oficial v0.3.37, `docs/PLUGINS.md` e `docs/plugin-api.json`.
@@ -35,5 +36,5 @@ Referência: openOMSI oficial v0.3.37, `docs/PLUGINS.md` e `docs/plugin-api.json
 - O código foi escrito contra a documentação pública; ainda precisa de execução real na versão-alvo para validar assinaturas e renderização de configurações.
 - A sincronização atual inclui um identificador local por evento e evita duplicar no cliente o evento que volta do host. Ainda não tem ACK/retry, transferência de snapshot, migração de host ou reconciliação robusta após desconexão.
 - A API LAN não garante integridade nem autenticidade dos clientes; não use os registros como anti-cheat forte. A deduplicação reduz duplicatas acidentais, mas não substitui ACK, replay e validação anti-fraude.
-- Os pesos de avaliação e a pontuação mínima ainda não são aplicados a uma nota calculada. Próxima fase: cadastro local de empresa, cargos e motoristas; score de condução com métricas disponíveis; escala e despacho por regras; sincronização com confirmação, replay e exportação/backup.
+- A carreira e a nota são locais por instalação e ainda não são perfil global multiplayer; a nota mínima configurada é uma referência, não bloqueia escalas. Próxima fase: cadastro de motoristas/cargos mais completo, escalas e despacho por regras, sincronização com confirmação/replay e exportação/backup.
 - O motor de regras não usa serviços pagos, conexão à internet ou modelo de IA. A arquitetura poderá aceitar uma IA opcional no futuro, sem torná-la necessária para jogar.
