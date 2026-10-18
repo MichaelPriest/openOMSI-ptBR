@@ -121,6 +121,8 @@ assert((data.empresa_virtual_career.xp or 0) == 30,
   "XP must increase exactly once for the later stop")
 
 -- Changing promotion rules must refresh the saved rank without waiting for another stop.
+emit("setting", "promotion_xp_senior", 500)
+emit("setting", "promotion_xp_instructor", 1500)
 emit("setting", "promotion_xp_driver", 20)
 assert(data.empresa_virtual_career.rank == "Motorista",
   "rank must be recalculated immediately when promotion thresholds change")
