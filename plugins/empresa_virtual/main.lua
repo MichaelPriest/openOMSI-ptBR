@@ -698,6 +698,39 @@ omsi.on("duty_start", function(line, tour)
   toast("Escala iniciada: linha " .. tostring(line or "—") .. ", viagem " .. tostring(tour or "—"), 5)
 end)
 
+-- API documentada nas builds base (docs/PLUGINS.md): evento "duty".
+-- Mantemos "duty_start" para builds que disponibilizam esse evento específico.
+omsi.on("duty", function(line, tour)
+  if not enabled then return end
+  last_delay_level = 0
+  record("duty", { line = line, tour = tour })
+  toast("Escala iniciada: linha " .. tostring(line or "—") .. ", viagem " .. tostring(tour or "—"), 5)
+end)
+
+-- Compatibilidade com o evento oficial "next_stop" nas builds base.
+-- Uma mudança de parada representa conclusão da parada anterior; não inferimos
+-- colisões nem eventos que a API não expõe.
+omsi.on("next_stop", function(new_stop, old_stop)
+  if not enabled or new_stop == nil or new_stop == old_stop or old_stop == nil then return end
+  career.completed_stops = career.completed_stops + 1
+  career.xp = career.xp + math.max(0, tonumber(cfg("xp_per_stop", 10)) or 10)
+  local info = omsi.info() or {}
+  local actual_delay = tonumber(info.delay) or 0
+  local warn = math.max(0, tonumber(cfg("delay_warn_seconds", 180)) or 180)
+  local critical = math.max(warn, tonumber(cfg("delay_critical_seconds", 600)) or 600)
+  local punctuality_weight = math.max(0, tonumber(cfg("punctuality_weight", 40)) or 40) / 40
+  if actual_delay >= critical then
+    adjust_score(-5 * punctuality_weight)
+  elseif actual_delay >= warn then
+    adjust_score(-2 * punctuality_weight)
+  else
+    adjust_score(math.max(0, tonumber(cfg("punctual_stop_reward", 1)) or 1) * punctuality_weight)
+  end
+  update_rank()
+  save_career()
+  record("depart", { stop = old_stop, delay = actual_delay, source = "next_stop" })
+end)
+
 omsi.on("stop_arrive", function(name, id, number, delay)
   record("arrive", { stop = id or name, delay = delay })
 end)
