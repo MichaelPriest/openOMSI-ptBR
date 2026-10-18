@@ -184,6 +184,7 @@ end)
 omsi.on("start", function()
   my_id, _, is_host = omsi.lan.me()
   is_host = is_host == true
+  update_rank()
   omsi.game.notify(company_name .. " carregada. F7: status; F6: salvar.", "info", 6)
   omsi.log(company_name .. " iniciada; host=" .. tostring(is_host))
 end)
@@ -194,6 +195,9 @@ omsi.on("key", function(key, down)
     local s = snapshot()
     toast(string.format("%s | %s | %d XP | Nota %d | Linha %s | Viagem %s | %.0f km/h | atraso %ds",
       s.player, career.rank, career.xp, career.score, s.line, s.trip, s.speed, math.floor(s.delay)), 8)
+    if career.score < (tonumber(cfg("minimum_score", 70)) or 70) then
+      toast("Nota abaixo do mínimo recomendado (" .. tostring(cfg("minimum_score", 70)) .. "). Revise segurança e pontualidade.", 6)
+    end
   elseif key == "F6" then
     persist()
     omsi.save()
