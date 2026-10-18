@@ -85,6 +85,10 @@ assert(duty_start_calls == 0, "dispatch must refuse when the driver already has 
 emit("duty", "136", "3")
 emit("duty_start", "136", "3")
 assert(count_events("duty") == 1, "equivalent duty events must be deduplicated")
+emit("duty", nil, nil)
+assert(count_events("duty_end") == 1, "giving up a duty must be recorded as an end, not a new duty")
+emit("duty", nil, nil)
+assert(count_events("duty_end") == 1, "duplicate no-duty events must not create repeated end records")
 
 -- A stop change and stop_depart can report the same completion.
 emit("next_stop", "Ponto seguinte", "Terminal")
