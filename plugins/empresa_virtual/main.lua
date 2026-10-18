@@ -53,7 +53,8 @@ local company_roster = omsi.storage.get("company_roster") or {}
 -- Intencionalmente volátil: não transforma estado antigo persistido em presença atual.
 local profile_age = {}
 local roster_sync_queue = {}
-local roster_sync_seq = 0
+-- Evita enfileirar várias cópias do mesmo snapshot enquanto ele ainda é enviado.
+local roster_sync_active = {}
 local roster_request_elapsed = 0
 local pending_dispatches = omsi.storage.get("pending_dispatches") or {}
 local dispatch_seq = tonumber(omsi.storage.get("dispatch_seq")) or 0
@@ -138,6 +139,10 @@ end
 
 local function queue_roster_snapshot(destination)
   if not is_host or not omsi.lan.active() then return end
+  local target_key = tostring(destination)
+  -- Coalesce pedidos repetidos enquanto o snapshot deste cliente está na fila.
+  if roster_sync_active[target_key] then return end
+  local first_queued = #roster_sync_queue + 1
   -- Enfileira uma cópia compacta por perfil; o envio é limitado abaixo para
   -- não disparar um burst de mensagens ao entrar na sessão.
   for name, profile in pairs(company_roster) do
@@ -145,10 +150,13 @@ local function queue_roster_snapshot(destination)
     if safe_name ~= "" then
       local payload = omsi.json.encode({ v = 1, k = "roster", n = safe_name, r = normalized_role(profile.role), l = tostring(profile.line or ""):sub(1, 12), t = tostring(profile.tour or ""):sub(1, 12), a = profile.active == true and 1 or 0 })
       if #payload <= 120 and not payload:find("|", 1, true) then
-        roster_sync_seq = roster_sync_seq + 1
-        roster_sync_queue[#roster_sync_queue + 1] = { to = destination, payload = payload, id = roster_sync_seq }
+        roster_sync_queue[#roster_sync_queue + 1] = { to = destination, payload = payload }
       end
     end
+  end
+  if #roster_sync_queue >= first_queued then
+    roster_sync_active[target_key] = true
+    roster_sync_queue[#roster_sync_queue].last_for_target = target_key
   end
 end
 
@@ -395,6 +403,9 @@ omsi.every(1, function()
       local ok, result = pcall(omsi.lan.send, item.to, item.payload)
       if not ok or result ~= true then
         omsi.log("Empresa Virtual: falha ao sincronizar perfil do cadastro")
+      end
+      if item.last_for_target then
+        roster_sync_active[item.last_for_target] = nil
       end
     end
   end
