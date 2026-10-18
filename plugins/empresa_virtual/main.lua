@@ -132,19 +132,19 @@ local function send_profile()
   local line = tostring(duty.line or ""):gsub("|", ""):sub(1, 12)
   local tour = tostring(duty.tour or duty.trip or ""):gsub("|", ""):sub(1, 12)
   local active = (duty.line ~= nil or duty.tour ~= nil or duty.trip ~= nil) and 1 or 0
-  local payload = omsi.json.encode({ v = 1, k = "profile", r = driver_role, l = line, t = tour, a = active })
-  if #payload <= 120 and not payload:find("|", 1, true) then
-    if is_host then
-      local _, name = omsi.lan.me()
-      name = tostring(name or "Host")
-      local profile = company_roster[name] or {}
-      profile.role, profile.line, profile.tour, profile.active = driver_role, line, tour, active == 1
-      profile.xp, profile.score = career.xp, career.score
-      company_roster[name] = profile
-      persist()
-    else
-      pcall(omsi.lan.send, 1, payload)
-    end
+  if is_host then
+    local _, name = omsi.lan.me()
+    name = tostring(name or "Host")
+    local profile = company_roster[name] or {}
+    profile.role, profile.line, profile.tour, profile.active = driver_role, line, tour, active == 1
+    profile.xp, profile.score = career.xp, career.score
+    company_roster[name] = profile
+    persist()
+    local payload = omsi.json.encode({ v = 1, k = "roster", n = name:sub(1, 24), r = driver_role, l = line, t = tour, a = active })
+    if #payload <= 120 and not payload:find("|", 1, true) then pcall(omsi.lan.send, 0, payload) end
+  else
+    local payload = omsi.json.encode({ v = 1, k = "profile", r = driver_role, l = line, t = tour, a = active })
+    if #payload <= 120 and not payload:find("|", 1, true) then pcall(omsi.lan.send, 1, payload) end
   end
 end
 
@@ -484,6 +484,27 @@ omsi.on("lan_message", function(from, raw)
     profile.last_seen = tonumber(session_info.clock) or 0
     profile.xp = tonumber(profile.xp) or 0
     profile.score = tonumber(profile.score) or 100
+    company_roster[name] = profile
+    persist()
+    local roster_payload = omsi.json.encode({ v = 1, k = "roster", n = name:sub(1, 24), r = role, l = profile.line, t = profile.tour, a = profile.active and 1 or 0 })
+    if #roster_payload <= 120 and not roster_payload:find("|", 1, true) then
+      local broadcast_ok, broadcast_result = pcall(omsi.lan.send, 0, roster_payload)
+      if not broadcast_ok or broadcast_result ~= true then
+        omsi.log("Empresa Virtual: não foi possível distribuir perfil de " .. name)
+      end
+    end
+    if roster_visible then render_roster() end
+    return
+  end
+
+  if e.k == "roster" then
+    if is_host or tonumber(from) ~= 1 or type(e.n) ~= "string" or e.n == "" then return end
+    local name = e.n:gsub("|", ""):sub(1, 24)
+    local profile = company_roster[name] or {}
+    profile.role = normalized_role(e.r)
+    profile.line = type(e.l) == "string" and e.l:sub(1, 12) or ""
+    profile.tour = type(e.t) == "string" and e.t:sub(1, 12) or ""
+    profile.active = tonumber(e.a) == 1
     company_roster[name] = profile
     persist()
     if roster_visible then render_roster() end
