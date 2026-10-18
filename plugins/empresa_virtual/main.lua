@@ -50,7 +50,6 @@ local seq = tonumber(omsi.storage.get("event_seq")) or 0
 local pending_events = omsi.storage.get("pending_events") or {}
 local company_roster = omsi.storage.get("company_roster") or {}
 -- Mantém IDs recentes separados do log visível, que é limitado a 300 eventos.
-local seen_event_ids = omsi.storage.get("seen_event_ids") or {}
 local seen_event_order = omsi.storage.get("seen_event_order") or {}
 local seen_event_set = {}
 for _, event_id in ipairs(seen_event_order) do
@@ -89,7 +88,6 @@ local function persist()
   omsi.storage.set("event_seq", seq)
   omsi.storage.set("pending_events", pending_events)
   omsi.storage.set("seen_event_order", seen_event_order)
-  omsi.storage.set("seen_event_ids", seen_event_set)
   omsi.storage.set("company_roster", company_roster)
   omsi.storage.set("pending_dispatches", pending_dispatches)
   omsi.storage.set("dispatch_seq", dispatch_seq)
