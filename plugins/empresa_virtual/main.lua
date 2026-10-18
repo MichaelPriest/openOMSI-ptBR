@@ -387,6 +387,10 @@ local function dispatch_default_duty()
     local info = omsi.info() or {}
     local dispatch_id = tostring(math.floor(tonumber(info.clock) or 0)) .. "-" .. tostring(dispatch_seq)
     local players = omsi.lan.players() or {}
+    if #players == 0 then
+      toast("Nenhum outro motorista conectado; a escala ficou apenas no host.", 6)
+      return
+    end
     pending_dispatches[dispatch_id] = { line = line, tour = tour, expected = #players, accepted = 0, refused = 0, created = tonumber(info.clock) or 0 }
     persist()
     local command = { v = 1, k = "dispatch", d = dispatch_id, l = line, t = tour }
@@ -526,18 +530,30 @@ omsi.on("lan_message", function(from, raw)
 
   if e.k == "dispatch" then
     -- Apenas clientes podem aceitar comandos de despacho; o host nunca aceita comandos de clientes.
-    if is_host or tonumber(from) ~= 1 or cfg("auto_accept_dispatch", true) ~= true then return end
+    if is_host or tonumber(from) ~= 1 then return end
+    local function reply_dispatch(accepted, reason)
+      if type(e.d) ~= "string" or #e.d > 20 then return end
+      local result = omsi.json.encode({ v = 1, k = "dispatch_result", d = e.d, a = accepted and 1 or 0, x = reason or "ERRO" })
+      if #result <= 120 and not result:find("|", 1, true) then pcall(omsi.lan.send, 1, result) end
+    end
+    if cfg("auto_accept_dispatch", true) ~= true then
+      toast("Despacho recebido, mas a aceitação automática está desativada.", 6)
+      reply_dispatch(false, "MANUAL")
+      return
+    end
     local line = type(e.l) == "string" and e.l:gsub("|", ""):sub(1, 20) or ""
     local tour = type(e.t) == "string" and e.t:gsub("|", ""):sub(1, 20) or ""
-    if line == "" or tour == "" then return end
+    if line == "" or tour == "" then reply_dispatch(false, "INVALIDO"); return end
     local min_score = tonumber(cfg("dispatch_minimum_score", 50)) or 50
     if career.score < min_score then
       toast("Despacho recusado: sua nota está abaixo do mínimo da empresa.", 7)
+      reply_dispatch(false, "NOTA")
       return
     end
     local current = omsi.duty.get() or {}
     if current.line ~= nil or current.tour ~= nil or current.trip ~= nil then
       toast("Despacho recusado: você já está em uma escala. Termine-a antes de aceitar outra.", 8)
+      reply_dispatch(false, "OCUPADO")
       return
     end
     local called, start_result, why = pcall(omsi.duty.start, line, tour)
@@ -548,10 +564,7 @@ omsi.on("lan_message", function(from, raw)
     else
       toast("Falha ao iniciar despacho: " .. tostring(why or start_result), 7)
     end
-    if type(e.d) == "string" and #e.d <= 20 then
-      local result = omsi.json.encode({ v = 1, k = "dispatch_result", d = e.d, a = accepted and 1 or 0, x = reason })
-      if #result <= 120 and not result:find("|", 1, true) then pcall(omsi.lan.send, 1, result) end
-    end
+    reply_dispatch(accepted, reason)
     return
   end
 
