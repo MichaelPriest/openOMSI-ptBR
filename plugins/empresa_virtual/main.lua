@@ -247,12 +247,20 @@ local function adjust_score(delta)
   save_career()
 end
 
+local function promotion_thresholds()
+  local driver = math.max(0, tonumber(cfg("promotion_xp_driver", 100)) or 100)
+  local senior = math.max(driver, tonumber(cfg("promotion_xp_senior", 500)) or 500)
+  local instructor = math.max(senior, tonumber(cfg("promotion_xp_instructor", 1500)) or 1500)
+  return driver, senior, instructor
+end
+
 local function update_rank()
   local xp = career.xp
+  local driver_xp, senior_xp, instructor_xp = promotion_thresholds()
   local rank = "Aprendiz"
-  if xp >= (tonumber(cfg("promotion_xp_driver", 100)) or 100) then rank = "Motorista" end
-  if xp >= (tonumber(cfg("promotion_xp_senior", 500)) or 500) then rank = "Motorista Sênior" end
-  if xp >= (tonumber(cfg("promotion_xp_instructor", 1500)) or 1500) then rank = "Instrutor" end
+  if xp >= driver_xp then rank = "Motorista" end
+  if xp >= senior_xp then rank = "Motorista Sênior" end
+  if xp >= instructor_xp then rank = "Instrutor" end
   if career.rank ~= rank then
     career.rank = rank
     toast("Promoção de carreira: " .. rank .. " (" .. math.floor(xp) .. " XP)", 7)
@@ -589,10 +597,11 @@ end
 render_career = function()
   if type(omsi.ui) ~= "table" or type(omsi.ui.set) ~= "function" then return end
   local next_rank, threshold
+  local driver_xp, senior_xp, instructor_xp = promotion_thresholds()
   local tiers = {
-    { name = "Motorista", xp = math.max(0, tonumber(cfg("promotion_xp_driver", 100)) or 100) },
-    { name = "Motorista Sênior", xp = math.max(0, tonumber(cfg("promotion_xp_senior", 500)) or 500) },
-    { name = "Instrutor", xp = math.max(0, tonumber(cfg("promotion_xp_instructor", 1500)) or 1500) },
+    { name = "Motorista", xp = driver_xp },
+    { name = "Motorista Sênior", xp = senior_xp },
+    { name = "Instrutor", xp = instructor_xp },
   }
   for _, tier in ipairs(tiers) do
     if career.xp < tier.xp then next_rank, threshold = tier.name, tier.xp; break end
