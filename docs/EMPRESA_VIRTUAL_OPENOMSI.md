@@ -12,7 +12,7 @@ Base de referência: tag oficial `v0.3.37`, `docs/PLUGINS.md` e `docs/plugin-api
 
 O plugin usa somente interfaces documentadas: `omsi.plugin.settings`, `omsi.lan.me/active/send`, eventos `duty_start`, `stop_arrive`, `stop_depart`, `crash`, `lan_message`, `omsi.storage`, `omsi.json`, `omsi.send`, `omsi.plugin.read`, `omsi.ui.toast` e `omsi.game.notify`. O envio UDP do jogo é apenas para `127.0.0.1`; ele não é usado para comunicar entre jogadores.
 
-O canal multiplayer tem limite documentado de 120 caracteres por mensagem e cerca de 10 mensagens/segundo. O plugin valida o tamanho e não envia o caractere `|`. O host recebe os eventos dos clientes, atribui sequência e retransmite; os clientes aceitam apenas eventos numerados pelo host. O formato é compacto para manter mensagens pequenas. A sincronização é por eventos, não replicação de todos os arquivos.
+O canal multiplayer tem limite documentado de 120 caracteres por mensagem e cerca de 10 mensagens/segundo. O plugin valida o tamanho e não envia o caractere `|`. O host recebe os eventos dos clientes, atribui sequência e retransmite; os clientes aceitam apenas eventos numerados pelo host. O formato é compacto para manter mensagens pequenas; eventos de parada enviam o ID da parada em vez do nome para reduzir o tamanho e evitar cortes de texto Unicode. A sincronização é por eventos, não replicação de todos os arquivos.
 
 ## Arquivos e responsabilidades
 - `plugins/empresa_virtual/main.lua`: coleta eventos, salva até 300 eventos recentes por instalação, sincroniza eventos da sessão e envia estado periódico ao agente local apenas no host.
@@ -25,7 +25,7 @@ O canal multiplayer tem limite documentado de 120 caracteres por mensagem e cerc
 2. Copie `plugins/empresa_virtual/main.lua` para `<raiz de conteúdo>/plugins/empresa_virtual/main.lua`.
 3. No host, instale Python 3.10+ e Ollama; baixe um modelo local adequado, por exemplo `ollama pull qwen2.5:3b`.
 4. Execute o agente com `python tools/empresa_virtual_ai.py --plugin-dir "CAMINHO\para\plugins\empresa_virtual"`. O Ollama deve estar ativo no mesmo computador.
-5. Nas configurações do plugin, habilite a Empresa Virtual. Marque "Este computador hospeda a IA local" apenas no host. F7 mostra o resumo; F6 salva os registros.
+5. Nas configurações do plugin, habilite a Empresa Virtual. No host, marque "Ativar IA local neste host" nas configurações do plugin. A configuração é independente do papel de host multiplayer; o agente só recebe estado quando a instalação também é o host da sessão. F7 mostra o resumo; F6 salva os registros.
 6. Conecte os jogadores à mesma sessão multiplayer através de uma VPN privada. Todos precisam instalar o mesmo plugin.
 
 ## Limitações conhecidas / próxima fase
