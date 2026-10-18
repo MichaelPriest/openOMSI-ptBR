@@ -106,7 +106,9 @@ local last_duty_event_signature = nil
 local is_host = false
 local my_id = 0
 local roster_visible = false
+local career_visible = false
 local render_roster
+local render_career
 local render_dashboard
 local configure_hotkeys
 local hotkey_ids = {}
@@ -485,6 +487,7 @@ end)
 omsi.every(5, function()
   for name, age in pairs(profile_age) do profile_age[name] = (tonumber(age) or 0) + 5 end
   if roster_visible then render_roster() end
+  if career_visible then render_career() end
   render_dashboard()
   if not is_host or not omsi.lan.active() then return end
   for dispatch_id, pending in pairs(pending_dispatches) do
@@ -577,6 +580,78 @@ local function save_records()
   end
 end
 
+render_career = function()
+  if type(omsi.ui) ~= "table" or type(omsi.ui.set) ~= "function" then return end
+  local next_rank, threshold
+  local tiers = {
+    { name = "Motorista", xp = math.max(0, tonumber(cfg("promotion_xp_driver", 100)) or 100) },
+    { name = "Motorista Sênior", xp = math.max(0, tonumber(cfg("promotion_xp_senior", 500)) or 500) },
+    { name = "Instrutor", xp = math.max(0, tonumber(cfg("promotion_xp_instructor", 1500)) or 1500) },
+  }
+  for _, tier in ipairs(tiers) do
+    if career.xp < tier.xp then next_rank, threshold = tier.name, tier.xp; break end
+  end
+  local progress_text
+  if next_rank then
+    progress_text = tostring(career.xp) .. " / " .. tostring(threshold) .. " XP para " .. next_rank
+  else
+    progress_text = "Todas as patentes locais desbloqueadas"
+  end
+  local children = {
+    { type = "row", children = {
+      { type = "icon", name = "trophy", color = "#FBBF24", size = 22 },
+      { type = "text", text = "CARREIRA DO MOTORISTA", size = 15, weight = "bold", grow = true },
+      { type = "badge", text = career.rank or "Aprendiz" },
+    } },
+    { type = "text", text = company_name .. " • " .. tostring(driver_role), size = 11, color = "#9CA3AF" },
+    { type = "divider" },
+    { type = "row", children = {
+      { type = "text", text = "EXPERIÊNCIA", size = 10, color = "#9CA3AF", grow = true },
+      { type = "badge", text = tostring(career.xp) .. " XP" },
+    } },
+    { type = "text", text = progress_text, size = 12 },
+    { type = "row", children = {
+      { type = "text", text = "PONTUAÇÃO DA EMPRESA", size = 10, color = "#9CA3AF", grow = true },
+      { type = "badge", text = tostring(math.floor(career.score)) .. " / 100" },
+    } },
+    { type = "row", children = {
+      { type = "text", text = "Paradas concluídas", grow = true },
+      { type = "text", text = tostring(career.completed_stops) },
+    } },
+    { type = "divider" },
+    { type = "text", text = "ATIVIDADE RECENTE", size = 10, weight = "bold", color = "#9CA3AF" },
+  }
+  local shown = 0
+  for i = #events, 1, -1 do
+    local event = events[i]
+    if type(event) == "table" then
+      local labels = { duty = "Escala iniciada", arrive = "Chegada à parada", depart = "Parada concluída", crash = "Colisão registrada", speed = "Alerta de velocidade" }
+      local label = labels[event.k]
+      if label then
+        local detail = label .. " • Linha " .. tostring(event.l or "—")
+        if event.t and event.t ~= "" then detail = detail .. " / " .. tostring(event.t) end
+        if event.n and event.n ~= "" then detail = detail .. " • " .. tostring(event.n) end
+        children[#children + 1] = { type = "text", text = detail, size = 11, color = "#D1D5DB" }
+        shown = shown + 1
+        if shown >= 6 then break end
+      end
+    end
+  end
+  if shown == 0 then
+    children[#children + 1] = { type = "text", text = "Ainda não há atividade registrada.", size = 11, color = "#9CA3AF" }
+  end
+  children[#children + 1] = { type = "row", children = {
+    { type = "button", id = "ev_career_save", text = "Salvar progresso" },
+    { type = "button", id = "ev_career_hide", text = "Fechar" },
+  } }
+  local ok, why = omsi.ui.set("empresa_virtual_career", {
+    anchor = "top_right", x = 365, y = 72, width = 320, padding = 14, gap = 8,
+    background = "#111827F2", radius = 14, accent = "#F59E0B",
+    visible = career_visible, draggable = true, grab = true, children = children,
+  })
+  if not ok and why then omsi.log("Empresa Virtual: painel de carreira não atualizado: " .. tostring(why)) end
+end
+
 render_dashboard = function()
   if type(omsi.ui) ~= "table" or type(omsi.ui.set) ~= "function" then return end
   local st = snapshot()
@@ -605,6 +680,7 @@ render_dashboard = function()
       { type = "text", text = string.format("%.0f km/h • atraso %ds", st.speed, math.floor(st.delay)), size = 11, color = st.delay > 180 and "#FCA5A5" or "#D1D5DB" },
       { type = "divider" },
       { type = "row", children = {
+        { type = "button", id = "ev_open_career", text = "Carreira" },
         { type = "button", id = "ev_open_roster", text = "Motoristas" },
         { type = "button", id = "ev_dispatch", text = "Despachar" },
       } },
@@ -679,7 +755,11 @@ end
 
 omsi.on("ui_click", function(panel, element)
   if panel == "empresa_virtual_dashboard" then
-    if element == "ev_open_roster" then
+    if element == "ev_open_career" then
+      career_visible = not career_visible
+      if career_visible then render_career() else omsi.ui.set("empresa_virtual_career", { visible = false }) end
+      render_dashboard()
+    elseif element == "ev_open_roster" then
       roster_visible = not roster_visible
       render_roster()
       render_dashboard()
@@ -699,6 +779,9 @@ omsi.on("ui_click", function(panel, element)
   elseif panel == "empresa_virtual_roster" then
     if element == "ev_roster_hide" then roster_visible = false; render_roster()
     elseif element == "ev_roster_status" then show_status(); render_roster() end
+  elseif panel == "empresa_virtual_career" then
+    if element == "ev_career_hide" then career_visible = false; omsi.ui.set("empresa_virtual_career", { visible = false })
+    elseif element == "ev_career_save" then save_records(); render_career() end
   end
 end)
 
