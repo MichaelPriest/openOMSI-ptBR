@@ -35,6 +35,10 @@ local settings = omsi.plugin.settings({
   { key = "dispatch_minimum_score", type = "number", label = "Nota mínima para receber despacho", default = 50, min = 0, max = 100, step = 5 },
   { key = "auto_accept_dispatch", type = "bool", label = "Aceitar despacho do host automaticamente", default = true },
   { key = "host_authoritative", type = "bool", label = "Host é autoridade dos registros sincronizados", default = true },
+  { key = "hotkey_roster", type = "text", label = "Atalho do painel de motoristas", default = "Ctrl+Alt+KeyM" },
+  { key = "hotkey_dispatch", type = "text", label = "Atalho para despacho", default = "Ctrl+Alt+KeyD" },
+  { key = "hotkey_status", type = "text", label = "Atalho para status", default = "Ctrl+Alt+KeyP" },
+  { key = "hotkey_save", type = "text", label = "Atalho para salvar registros", default = "Ctrl+Alt+KeyS" },
 }, "Agente de Operações — Empresa Virtual")
 
 local enabled = settings.enabled ~= false
@@ -85,6 +89,10 @@ local is_host = false
 local my_id = 0
 local roster_visible = false
 local render_roster
+local render_dashboard
+local configure_hotkeys
+local hotkey_ids = {}
+local native_hotkeys = false
 
 local function persist()
   while #events > 300 do table.remove(events, 1) end
@@ -348,7 +356,11 @@ render_roster = function()
   if #players == 0 then
     children[#children + 1] = { type = "text", text = "Nenhum outro motorista conectado", size = 12, color = "#9CA3AF" }
   end
-  children[#children + 1] = { type = "text", text = "F4: mostrar/ocultar • F5: despacho do host", size = 10, color = "#9CA3AF" }
+  children[#children + 1] = { type = "text", text = "Atalhos configuráveis nas opções da Empresa Virtual.", size = 10, color = "#9CA3AF" }
+  children[#children + 1] = { type = "row", children = {
+    { type = "button", id = "ev_roster_status", text = "Atualizar" },
+    { type = "button", id = "ev_roster_hide", text = "Fechar painel" },
+  } }
 
   local ok, why = omsi.ui.set("empresa_virtual_roster", {
     anchor = "top_right", x = 18, y = 72, width = 360, padding = 14, gap = 7,
@@ -396,6 +408,10 @@ end
 
 omsi.on("setting", function(key, value)
   settings[key] = value
+  if key == "hotkey_roster" or key == "hotkey_dispatch" or key == "hotkey_status" or key == "hotkey_save" then
+    if configure_hotkeys then configure_hotkeys() end
+    if render_dashboard then render_dashboard() end
+  end
   if key == "enabled" then enabled = value == true end
   if key == "company_name" then company_name = tostring(value or "Viação Virtual") end
   if key == "driver_role" then
@@ -421,8 +437,13 @@ omsi.on("start", function()
   if not is_host and omsi.lan.active() and cfg("sync_multiplayer", true) == true then
     pcall(omsi.lan.send, 1, omsi.json.encode({ v = 1, k = "roster_request" }))
   end
+  configure_hotkeys()
   render_roster()
-  omsi.game.notify(company_name .. " carregada. F4: motoristas; F5: despacho; F7: status.", "info", 6)
+  render_dashboard()
+  if type(omsi.plugin.show_settings) == "function" then
+    omsi.log("Empresa Virtual: configurações disponíveis no painel nativo; atalho/painel principal disponíveis.")
+  end
+  omsi.game.notify(company_name .. " carregada. Abra o painel Empresa Virtual para acessar a operação.", "info", 6)
   omsi.log(company_name .. " iniciada; host=" .. tostring(is_host))
 end)
 
@@ -445,6 +466,7 @@ end)
 omsi.every(5, function()
   for name, age in pairs(profile_age) do profile_age[name] = (tonumber(age) or 0) + 5 end
   if roster_visible then render_roster() end
+  render_dashboard()
   if not is_host or not omsi.lan.active() then return end
   for dispatch_id, pending in pairs(pending_dispatches) do
     pending.wait_seconds = (tonumber(pending.wait_seconds) or 0) + 5
@@ -516,24 +538,157 @@ local function dispatch_default_duty()
   end
 end
 
-omsi.on("key", function(key, down)
-  if not down or not enabled then return end
-  if key == "F4" then
-    roster_visible = not roster_visible
-    render_roster()
-  elseif key == "F5" then
-    dispatch_default_duty()
-  elseif key == "F7" and cfg("show_status", true) then
-    local s = snapshot()
-    toast(string.format("%s | %s | %d XP | Nota %d | Linha %s | Viagem %s | %.0f km/h | atraso %ds",
-      s.player, career.rank, career.xp, career.score, s.line, s.trip, s.speed, math.floor(s.delay)), 8)
-    if career.score < (tonumber(cfg("minimum_score", 70)) or 70) then
-      toast("Nota abaixo do mínimo recomendado (" .. tostring(cfg("minimum_score", 70)) .. "). Revise segurança e pontualidade.", 6)
-    end
-  elseif key == "F6" then
-    persist()
-    omsi.save()
+local function show_status()
+  local st = snapshot()
+  toast(string.format("%s | %s | %d XP | Nota %d | Linha %s | Viagem %s | %.0f km/h | atraso %ds",
+    st.player, career.rank, career.xp, career.score, st.line, st.trip, st.speed, math.floor(st.delay)), 8)
+  if career.score < (tonumber(cfg("minimum_score", 70)) or 70) then
+    toast("Nota abaixo do mínimo recomendado (" .. tostring(cfg("minimum_score", 70)) .. "). Revise segurança e pontualidade.", 6)
+  end
+end
+
+local function save_records()
+  persist()
+  save_career()
+  if type(omsi.save) == "function" then omsi.save() end
+  if type(omsi.game.notify) == "function" then
     omsi.game.notify("Registros locais salvos.", "info", 4)
+  else
+    toast("Registros locais salvos.", 4)
+  end
+end
+
+render_dashboard = function()
+  if type(omsi.ui) ~= "table" or type(omsi.ui.set) ~= "function" then return end
+  local st = snapshot()
+  local mode = (omsi.lan.active() and "MULTIPLAYER" or "SOLO / OFFLINE")
+  local panel = {
+    anchor = "top_right", x = 18, y = 72, width = 330, padding = 12, gap = 7,
+    background = "#111827F2", radius = 14, accent = "#3B82F6",
+    visible = enabled, draggable = true, grab = true,
+    children = {
+      { type = "row", children = {
+        { type = "icon", name = "directions_bus", color = "#60A5FA", size = 20 },
+        { type = "text", text = "EMPRESA VIRTUAL", size = 15, weight = "bold", grow = true },
+        { type = "badge", text = mode },
+      } },
+      { type = "text", text = company_name .. " • " .. tostring(st.map ~= "" and st.map or "Mapa não identificado"), size = 11, color = "#9CA3AF" },
+      { type = "row", children = {
+        { type = "text", text = st.player, weight = "bold", grow = true },
+        { type = "badge", text = driver_role },
+      } },
+      { type = "row", children = {
+        { type = "text", text = "XP " .. tostring(career.xp), grow = true },
+        { type = "badge", text = "Nota " .. tostring(math.floor(career.score)) },
+        { type = "badge", text = career.rank },
+      } },
+      { type = "text", text = "Linha " .. st.line .. " • Viagem " .. st.tour .. " • Próxima: " .. st.next_stop, size = 11 },
+      { type = "text", text = string.format("%.0f km/h • atraso %ds", st.speed, math.floor(st.delay)), size = 11, color = st.delay > 180 and "#FCA5A5" or "#D1D5DB" },
+      { type = "divider" },
+      { type = "row", children = {
+        { type = "button", id = "ev_open_roster", text = "Motoristas" },
+        { type = "button", id = "ev_dispatch", text = "Despachar" },
+      } },
+      { type = "row", children = {
+        { type = "button", id = "ev_status", text = "Status" },
+        { type = "button", id = "ev_save", text = "Salvar" },
+        { type = "button", id = "ev_settings", text = "Configurar" },
+      } },
+      { type = "text", text = "Atalhos: " .. tostring(cfg("hotkey_roster", "Ctrl+Alt+KeyM")) .. " • " .. tostring(cfg("hotkey_dispatch", "Ctrl+Alt+KeyD")), size = 9, color = "#9CA3AF" },
+    },
+  }
+  local ok, why = omsi.ui.set("empresa_virtual_dashboard", panel)
+  if not ok and why then omsi.log("Empresa Virtual: painel principal não atualizado: " .. tostring(why)) end
+end
+
+configure_hotkeys = function()
+  if type(omsi.cancel) == "function" then
+    for _, id in ipairs(hotkey_ids) do pcall(omsi.cancel, id) end
+  end
+  hotkey_ids = {}
+  native_hotkeys = type(omsi.input) == "table" and type(omsi.input.hotkey) == "function"
+  if not native_hotkeys then
+    omsi.log("Empresa Virtual: atalhos com modificadores indisponíveis; nenhum atalho antigo será assumido como livre.")
+    return
+  end
+
+  local bindings = {}
+  if type(omsi.input.bindings) == "function" then
+    local ok, result = pcall(omsi.input.bindings)
+    if ok and type(result) == "table" then bindings = result end
+  end
+  local actions = {
+    { key = "hotkey_roster", fallback = "Ctrl+Alt+KeyM", label = "motoristas", run = function() roster_visible = not roster_visible; render_roster(); render_dashboard() end },
+    { key = "hotkey_dispatch", fallback = "Ctrl+Alt+KeyD", label = "despacho", run = dispatch_default_duty },
+    { key = "hotkey_status", fallback = "Ctrl+Alt+KeyP", label = "status", run = show_status },
+    { key = "hotkey_save", fallback = "Ctrl+Alt+KeyS", label = "salvar", run = save_records },
+  }
+  local used = {}
+  for _, action in ipairs(actions) do
+    local chord = tostring(cfg(action.key, action.fallback) or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if chord == "" then
+      omsi.log("Empresa Virtual: atalho vazio; ação " .. action.label .. " não vinculada.")
+    elseif used[chord] then
+      toast("Atalho duplicado (" .. chord .. "): " .. action.label .. " não foi vinculado.", 7)
+    else
+      local conflict
+      for _, binding in ipairs(bindings) do
+        if type(binding) == "table" and tostring(binding.key or "") == chord then
+          conflict = tostring(binding.action or "comando do simulador")
+          break
+        end
+      end
+      if conflict then
+        toast("Conflito de atalho: " .. chord .. " já está associado a " .. conflict .. ". Altere nas configurações.", 8)
+        omsi.log("Empresa Virtual: atalho " .. chord .. " conflita com " .. conflict)
+      else
+        local ok, id = pcall(omsi.input.hotkey, chord, function()
+          if enabled and not (type(omsi.ui.typing) == "function" and omsi.ui.typing()) then action.run() end
+        end)
+        if ok and type(id) == "number" then
+          hotkey_ids[#hotkey_ids + 1] = id
+          used[chord] = true
+        else
+          toast("Não foi possível registrar o atalho " .. chord .. " (" .. action.label .. ").", 6)
+          omsi.log("Empresa Virtual: falha ao registrar atalho " .. chord .. ": " .. tostring(id))
+        end
+      end
+    end
+  end
+  omsi.log("Empresa Virtual: atalhos configuráveis registrados=" .. tostring(#hotkey_ids))
+end
+
+omsi.on("ui_click", function(panel, element)
+  if panel == "empresa_virtual_dashboard" then
+    if element == "ev_open_roster" then
+      roster_visible = not roster_visible
+      render_roster()
+      render_dashboard()
+    elseif element == "ev_dispatch" then
+      dispatch_default_duty()
+    elseif element == "ev_status" then
+      show_status()
+    elseif element == "ev_save" then
+      save_records()
+    elseif element == "ev_settings" then
+      if type(omsi.plugin.show_settings) == "function" then
+        omsi.plugin.show_settings(true)
+      else
+        toast("Esta versão não oferece painel nativo de configurações.", 6)
+      end
+    end
+  elseif panel == "empresa_virtual_roster" then
+    if element == "ev_roster_hide" then roster_visible = false; render_roster()
+    elseif element == "ev_roster_status" then show_status(); render_roster() end
+  end
+end)
+
+-- Compatibilidade: em builds antigas sem hotkey chords, não tomamos teclas F*
+-- conhecidas como livres. As ações ficam disponíveis pelo painel clicável.
+omsi.on("key", function(key, down)
+  if not down or not enabled or native_hotkeys then return end
+  if key == "F10" and type(omsi.ui.focus) == "function" then
+    omsi.ui.focus(not omsi.ui.focused())
   end
 end)
 
