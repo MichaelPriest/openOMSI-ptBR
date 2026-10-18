@@ -18,6 +18,12 @@ local settings = omsi.plugin.settings({
   { key = "safety_weight", type = "number", label = "Peso da condução segura (0 a 100)", default = 40, min = 0, max = 100, step = 5 },
   { key = "service_weight", type = "number", label = "Peso do serviço (0 a 100)", default = 20, min = 0, max = 100, step = 5 },
   { key = "minimum_score", type = "number", label = "Pontuação mínima recomendada", default = 70, min = 0, max = 100, step = 5 },
+  { key = "xp_per_stop", type = "number", label = "Experiência por parada concluída", default = 10, min = 0, max = 100, step = 5 },
+  { key = "promotion_xp_driver", type = "number", label = "XP para Motorista", default = 100, min = 0, max = 10000, step = 25 },
+  { key = "promotion_xp_senior", type = "number", label = "XP para Motorista Sênior", default = 500, min = 0, max = 25000, step = 50 },
+  { key = "promotion_xp_instructor", type = "number", label = "XP para Instrutor", default = 1500, min = 0, max = 50000, step = 100 },
+  { key = "speed_score_penalty", type = "number", label = "Pontos perdidos por alerta de velocidade", default = 2, min = 0, max = 25, step = 1 },
+  { key = "punctual_stop_reward", type = "number", label = "Pontos por parada pontual", default = 1, min = 0, max = 5, step = 1 },
   { key = "host_authoritative", type = "bool", label = "Host é autoridade dos registros sincronizados", default = true },
 }, "Agente de Operações — Empresa Virtual")
 
@@ -30,6 +36,10 @@ end
 
 local company_name = tostring(cfg("company_name", "Viação Virtual"))
 local events = omsi.storage.get("events") or {}
+local career = omsi.storage.get("career") or { xp = 0, score = 100, rank = "Aprendiz", completed_stops = 0 }
+career.xp = tonumber(career.xp) or 0
+career.score = math.max(0, math.min(100, tonumber(career.score) or 100))
+career.completed_stops = tonumber(career.completed_stops) or 0
 local seq = tonumber(omsi.storage.get("event_seq")) or 0
 local last_speed_warning = -100000
 local last_delay_level = 0
@@ -40,6 +50,28 @@ local function persist()
   while #events > 300 do table.remove(events, 1) end
   omsi.storage.set("events", events)
   omsi.storage.set("event_seq", seq)
+end
+
+local function save_career()
+  omsi.storage.set("career", career)
+end
+
+local function adjust_score(delta)
+  career.score = math.max(0, math.min(100, career.score + delta))
+  save_career()
+end
+
+local function update_rank()
+  local xp = career.xp
+  local rank = "Aprendiz"
+  if xp >= (tonumber(cfg("promotion_xp_driver", 100)) or 100) then rank = "Motorista" end
+  if xp >= (tonumber(cfg("promotion_xp_senior", 500)) or 500) then rank = "Motorista Sênior" end
+  if xp >= (tonumber(cfg("promotion_xp_instructor", 1500)) or 1500) then rank = "Instrutor" end
+  if career.rank ~= rank then
+    career.rank = rank
+    toast("Promoção de carreira: " .. rank .. " (" .. math.floor(xp) .. " XP)", 7)
+  end
+  save_career()
 end
 
 local function record(kind, fields)
@@ -119,6 +151,8 @@ local function evaluate_rules()
     if limit > 0 and s.speed > limit + tolerance and now - last_speed_warning >= interval then
       last_speed_warning = now
       toast(string.format("Excesso de velocidade: %.0f km/h (limite %.0f)", s.speed, limit), 6)
+      local weight = math.max(0, tonumber(cfg("safety_weight", 40)) or 40) / 40
+      adjust_score(-(tonumber(cfg("speed_score_penalty", 2)) or 2) * weight)
       record("speed", { line = s.line, tour = s.tour, delay = s.delay })
     end
   end
@@ -156,8 +190,8 @@ omsi.on("key", function(key, down)
   if not down or not enabled then return end
   if key == "F7" and cfg("show_status", true) then
     local s = snapshot()
-    toast(string.format("%s | Linha %s | Viagem %s | %s km/h | atraso %ds",
-      s.player, s.line, s.trip, math.floor(s.speed), math.floor(s.delay)), 7)
+    toast(string.format("%s | %s | %d XP | Nota %d | Linha %s | Viagem %s | %.0f km/h | atraso %ds",
+      s.player, career.rank, career.xp, career.score, s.line, s.trip, s.speed, math.floor(s.delay)), 8)
   elseif key == "F6" then
     persist()
     omsi.save()
@@ -176,13 +210,32 @@ omsi.on("stop_arrive", function(name, id, number, delay)
 end)
 
 omsi.on("stop_depart", function(name, id, number, delay)
+  local actual_delay = tonumber(delay) or 0
+  career.completed_stops = career.completed_stops + 1
+  career.xp = career.xp + math.max(0, tonumber(cfg("xp_per_stop", 10)) or 10)
+
+  local warn = math.max(0, tonumber(cfg("delay_warn_seconds", 180)) or 180)
+  local critical = math.max(warn, tonumber(cfg("delay_critical_seconds", 600)) or 600)
+  local punctuality_weight = math.max(0, tonumber(cfg("punctuality_weight", 40)) or 40) / 40
+  if actual_delay >= critical then
+    adjust_score(-5 * punctuality_weight)
+  elseif actual_delay >= warn then
+    adjust_score(-2 * punctuality_weight)
+  else
+    adjust_score(math.max(0, tonumber(cfg("punctual_stop_reward", 1)) or 1) * punctuality_weight)
+  end
+
+  update_rank()
+  save_career()
   record("depart", { stop = id or name, delay = delay })
 end)
 
 omsi.on("crash", function(energy, speed)
   if cfg("warn_crash", true) then
     local points = math.max(0, tonumber(cfg("crash_penalty", 15)) or 15)
-    toast(string.format("Colisão registada. Penalidade de referência: %d pontos.", math.floor(points)), 7)
+    local weight = math.max(0, tonumber(cfg("safety_weight", 40)) or 40) / 40
+    adjust_score(-points * weight)
+    toast(string.format("Colisão registada. Penalidade: %d pontos. Nota atual: %d.", math.floor(points), math.floor(career.score)), 7)
     record("crash", { stop = tostring(math.floor(tonumber(energy) or 0)) .. "kJ", delay = speed })
   end
 end)
