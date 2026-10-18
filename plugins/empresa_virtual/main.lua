@@ -50,6 +50,7 @@ local last_speed_warning = -100000
 local last_delay_level = 0
 local is_host = false
 local my_id = 0
+local roster_visible = false
 
 local function persist()
   while #events > 300 do table.remove(events, 1) end
@@ -144,6 +145,53 @@ local function snapshot()
   }
 end
 
+local function render_roster()
+  if not (omsi.ui and omsi.ui.set) then return end
+  local children = {
+    { type = "row", children = {
+      { type = "icon", name = "groups", color = "#60A5FA", size = 20 },
+      { type = "text", text = "EMPRESA VIRTUAL", size = 15, weight = "bold", grow = true },
+      { type = "badge", text = is_host and "HOST" or "CLIENTE" },
+    } },
+    { type = "text", text = company_name .. " • " .. tostring(omsi.info().map or "Mapa não identificado"), size = 11, color = "#9CA3AF" },
+    { type = "divider" },
+  }
+  local own = snapshot()
+  children[#children + 1] = { type = "row", children = {
+    { type = "text", text = tostring(own.player) .. " (você)", weight = "bold", grow = true },
+    { type = "badge", text = string.format("%.0f km/h", own.speed) },
+  } }
+  children[#children + 1] = { type = "text", text = "Linha " .. own.line .. " • Viagem " .. own.tour .. " • Nota " .. tostring(math.floor(career.score)) .. " • " .. career.rank, size = 11, color = "#D1D5DB" }
+
+  local players = {}
+  if omsi.lan.active() then players = omsi.lan.players() or {} end
+  table.sort(players, function(a, b) return (tonumber(a.id) or 0) < (tonumber(b.id) or 0) end)
+  children[#children + 1] = { type = "divider" }
+  children[#children + 1] = { type = "text", text = "MOTORISTAS NA SESSÃO (" .. tostring(#players + 1) .. ")", size = 10, color = "#9CA3AF", weight = "bold" }
+  for _, p in ipairs(players) do
+    local name = tostring(p.name or ("Jogador " .. tostring(p.id or "?"))):sub(1, 28)
+    local line = tostring(p.line or "—")
+    local tour = tostring(p.tour or "—")
+    local speed = tonumber(p.speed) or 0
+    children[#children + 1] = { type = "row", children = {
+      { type = "text", text = name, grow = true },
+      { type = "text", text = line .. "/" .. tour, color = "#9CA3AF" },
+      { type = "badge", text = string.format("%.0f", speed) },
+    } }
+  end
+  if #players == 0 then
+    children[#children + 1] = { type = "text", text = "Nenhum outro motorista conectado", size = 12, color = "#9CA3AF" }
+  end
+  children[#children + 1] = { type = "text", text = "F4: mostrar/ocultar • F5: despacho do host", size = 10, color = "#9CA3AF" }
+
+  local ok, why = omsi.ui.set("empresa_virtual_roster", {
+    anchor = "top_right", x = 18, y = 72, width = 360, padding = 14, gap = 7,
+    background = "#111827F2", radius = 14, accent = "#3B82F6",
+    visible = roster_visible, draggable = true, children = children,
+  })
+  if not ok and why then omsi.log("Empresa Virtual: painel não atualizado: " .. tostring(why)) end
+end
+
 local function evaluate_rules()
   if not enabled then return end
   local s = snapshot()
@@ -190,8 +238,13 @@ omsi.on("start", function()
   my_id, _, is_host = omsi.lan.me()
   is_host = is_host == true
   update_rank()
-  omsi.game.notify(company_name .. " carregada. F7: status; F6: salvar.", "info", 6)
+  render_roster()
+  omsi.game.notify(company_name .. " carregada. F4: motoristas; F5: despacho; F7: status.", "info", 6)
   omsi.log(company_name .. " iniciada; host=" .. tostring(is_host))
+end)
+
+omsi.every(5, function()
+  if roster_visible then render_roster() end
 end)
 
 local function dispatch_default_duty()
@@ -238,7 +291,10 @@ end
 
 omsi.on("key", function(key, down)
   if not down or not enabled then return end
-  if key == "F5" then
+  if key == "F4" then
+    roster_visible = not roster_visible
+    render_roster()
+  elseif key == "F5" then
     dispatch_default_duty()
   elseif key == "F7" and cfg("show_status", true) then
     local s = snapshot()
