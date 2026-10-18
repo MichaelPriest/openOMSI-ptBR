@@ -103,6 +103,8 @@ local last_stop_award_tick = -100000
 local last_stop_award_signature = nil
 local last_duty_event_tick = -100000
 local last_duty_event_signature = nil
+local last_duty_line = nil
+local last_duty_tour = nil
 local is_host = false
 local my_id = 0
 local roster_visible = false
@@ -640,7 +642,7 @@ render_career = function()
   for i = #events, 1, -1 do
     local event = events[i]
     if type(event) == "table" then
-      local labels = { duty = "Escala iniciada", arrive = "Chegada à parada", depart = "Parada concluída", crash = "Colisão registrada", speed = "Alerta de velocidade" }
+      local labels = { duty = "Escala iniciada", duty_end = "Escala encerrada", arrive = "Chegada à parada", depart = "Parada concluída", crash = "Colisão registrada", speed = "Alerta de velocidade" }
       local label = labels[event.k]
       if label then
         local detail = label .. " • Linha " .. tostring(event.l or "—")
@@ -811,6 +813,19 @@ end)
 
 local function handle_duty_started(line, tour)
   if not enabled then return end
+  -- A API documentada emite duty(nil) quando a escala é abandonada.
+  -- Não registrar isso como uma nova escala "—/—" nem deixar a escala antiga ativa.
+  if line == nil and tour == nil then
+    if last_duty_event_signature ~= nil then
+      record("duty_end", { line = last_duty_line, tour = last_duty_tour })
+      toast("Escala encerrada.", 5)
+    end
+    last_duty_event_signature = nil
+    last_duty_event_tick = -100000
+    last_duty_line, last_duty_tour = nil, nil
+    last_delay_level = 0
+    return
+  end
   local signature = tostring(line or "—") .. "|" .. tostring(tour or "—")
   -- Builds diferentes podem emitir duty_start e duty para a mesma escala.
   if signature == last_duty_event_signature and plugin_elapsed_seconds - last_duty_event_tick <= 3 then
@@ -819,6 +834,7 @@ local function handle_duty_started(line, tour)
   end
   last_duty_event_signature = signature
   last_duty_event_tick = plugin_elapsed_seconds
+  last_duty_line, last_duty_tour = line, tour
   last_delay_level = 0
   record("duty", { line = line, tour = tour })
   toast("Escala iniciada: linha " .. tostring(line or "—") .. ", viagem " .. tostring(tour or "—"), 5)
