@@ -32,3 +32,7 @@ A API documentada confirma as funções e eventos usados, mas o plugin ainda pre
 5. Só então marcar a base como 0.3.37 e abrir PR de integração.
 
 Nenhuma alteração foi feita na branch `main` e nenhum PR foi mesclado.
+
+## Artefatos oficiais para teste manual
+
+A release `v0.3.37` está marcada como *pre-release*. O instalador x64 para Windows está publicado pelo projeto oficial: https://github.com/openOMSI-org/openOMSI/releases/download/v0.3.37/openOMSI-0.3.37-windows-x64-setup.exe . Também há ZIP portátil x64: https://github.com/openOMSI-org/openOMSI/releases/download/v0.3.37/openOMSI-0.3.37-windows-x64.zip . Esses binários são builds oficiais upstream, não builds customizadas deste repositório e ainda não incluem o DriverOps portado aqui.
