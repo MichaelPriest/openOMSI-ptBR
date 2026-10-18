@@ -68,8 +68,14 @@ local function count_events(kind)
 end
 
 assert(callbacks.start and #callbacks.start > 0, "plugin must register start event")
+-- Misordered user settings must not grant a senior rank before the driver threshold.
+emit("setting", "promotion_xp_senior", 0)
+emit("setting", "promotion_xp_driver", 100)
+emit("setting", "promotion_xp_instructor", 200)
 emit("start")
 assert(data.empresa_virtual_career ~= nil, "career must persist locally at startup")
+assert(data.empresa_virtual_career.rank == "Aprendiz",
+  "promotion thresholds must be monotonic even when settings are misconfigured")
 
 -- The host must not start a second duty when one is already active.
 emit("ui_click", "empresa_virtual_dashboard", "ev_dispatch")
