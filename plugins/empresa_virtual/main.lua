@@ -46,6 +46,7 @@ career.xp = tonumber(career.xp) or 0
 career.score = math.max(0, math.min(100, tonumber(career.score) or 100))
 career.completed_stops = tonumber(career.completed_stops) or 0
 local seq = tonumber(omsi.storage.get("event_seq")) or 0
+local pending_events = omsi.storage.get("pending_events") or {}
 local last_speed_warning = -100000
 local last_delay_level = 0
 local is_host = false
@@ -56,6 +57,30 @@ local function persist()
   while #events > 300 do table.remove(events, 1) end
   omsi.storage.set("events", events)
   omsi.storage.set("event_seq", seq)
+  omsi.storage.set("pending_events", pending_events)
+end
+
+local function send_pending_event(event)
+  if not (cfg("sync_multiplayer", true) and omsi.lan.active()) then return false end
+  local destination = is_host and 0 or 1
+  local ok, result = pcall(omsi.lan.send, destination, omsi.json.encode(event))
+  return ok and result == true
+end
+
+local function queue_event(event)
+  if is_host or not (cfg("sync_multiplayer", true) and omsi.lan.active()) then return end
+  pending_events[#pending_events + 1] = event
+  persist()
+  send_pending_event(event)
+end
+
+local function acknowledge_event(event_id)
+  for i = #pending_events, 1, -1 do
+    if pending_events[i].i == event_id then
+      table.remove(pending_events, i)
+    end
+  end
+  persist()
 end
 
 local toast
@@ -104,9 +129,12 @@ local function record(kind, fields)
     local payload = omsi.json.encode(event)
     if #payload <= 120 and not payload:find("|", 1, true) then
       if is_host then
-        omsi.lan.send(0, payload)
+        local sent, result = pcall(omsi.lan.send, 0, payload)
+        if not sent or result ~= true then
+          omsi.log("Empresa Virtual: falha ao divulgar evento " .. tostring(event.i))
+        end
       else
-        omsi.lan.send(1, payload)
+        queue_event(event)
       end
     end
   end
@@ -365,6 +393,13 @@ omsi.on("lan_message", function(from, raw)
   local ok, e = pcall(omsi.json.decode, raw)
   if not ok or type(e) ~= "table" or e.v ~= 1 or type(e.k) ~= "string" then return end
 
+  if e.k == "ack" then
+    if not is_host and tonumber(from) == 1 and type(e.i) == "string" then
+      acknowledge_event(e.i)
+    end
+    return
+  end
+
   if e.k == "dispatch" then
     -- Apenas clientes podem aceitar comandos de despacho; o host nunca aceita comandos de clientes.
     if is_host or tonumber(from) ~= 1 or cfg("auto_accept_dispatch", true) ~= true then return end
@@ -397,15 +432,25 @@ omsi.on("lan_message", function(from, raw)
     -- O host valida o remetente, elimina reenvios e atribui a sequência oficial.
     if tonumber(from) == 1 then return end
     for _, previous in ipairs(events) do
-      if previous.i == e.i then return end
+      if previous.i == e.i then
+        pcall(omsi.lan.send, tonumber(from), omsi.json.encode({ v = 1, k = "ack", i = e.i }))
+        return
+      end
     end
     seq = seq + 1
     e.q = seq
     e.p = tonumber(from) or e.p
     events[#events + 1] = e
     persist()
+    local ack_ok, ack_result = pcall(omsi.lan.send, tonumber(from), omsi.json.encode({ v = 1, k = "ack", i = e.i }))
+    if not ack_ok or ack_result ~= true then
+      omsi.log("Empresa Virtual: confirmação não enviada para o evento " .. tostring(e.i))
+    end
     local payload = omsi.json.encode(e)
-    if #payload <= 120 and not payload:find("|", 1, true) then omsi.lan.send(0, payload) end
+    if #payload <= 120 and not payload:find("|", 1, true) then
+      local sent, result = pcall(omsi.lan.send, 0, payload)
+      if not sent or result ~= true then omsi.log("Empresa Virtual: evento não divulgado " .. tostring(e.i)) end
+    end
   else
     if tonumber(from) ~= 1 or not tonumber(e.q) then return end
     local last = tonumber(omsi.storage.get("last_host_seq")) or 0
@@ -429,3 +474,13 @@ omsi.on("lan_message", function(from, raw)
 end)
 
 omsi.every(2, evaluate_rules)
+
+-- Reenvia eventos ainda sem confirmação do host, com limite de uma tentativa por ciclo.
+-- A fila fica persistida para sobreviver a recargas do plugin e desconexões temporárias.
+omsi.every(5, function()
+  if is_host or not enabled or cfg("sync_multiplayer", true) ~= true or not omsi.lan.active() then return end
+  for _, event in ipairs(pending_events) do
+    send_pending_event(event)
+    break
+  end
+end)
