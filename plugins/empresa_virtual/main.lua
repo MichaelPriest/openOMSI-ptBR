@@ -54,6 +54,7 @@ local company_roster = omsi.storage.get("company_roster") or {}
 local profile_age = {}
 local roster_sync_queue = {}
 local roster_sync_seq = 0
+local roster_request_elapsed = 0
 local pending_dispatches = omsi.storage.get("pending_dispatches") or {}
 local dispatch_seq = tonumber(omsi.storage.get("dispatch_seq")) or 0
 local driver_role = tostring(cfg("driver_role", "Motorista"))
@@ -712,13 +713,18 @@ omsi.every(2, evaluate_rules)
 -- Reenvia eventos ainda sem confirmação do host, com limite de uma tentativa por ciclo.
 -- A fila fica persistida para sobreviver a recargas do plugin e desconexões temporárias.
 omsi.every(10, function()
-  if enabled then
-    send_profile()
-    -- Reconsulta o cadastro periodicamente para recuperar perfis perdidos e
-    -- permitir que quem entrou depois receba o estado conhecido pelo host.
-    if not is_host and omsi.lan.active() and cfg("sync_multiplayer", true) == true then
+  if not enabled then return end
+  send_profile()
+  if not is_host and omsi.lan.active() and cfg("sync_multiplayer", true) == true then
+    roster_request_elapsed = roster_request_elapsed + 10
+    if roster_request_elapsed >= 30 then
+      roster_request_elapsed = 0
+      -- Reconsulta o cadastro a cada 30 segundos para recuperar perfis perdidos
+      -- sem solicitar snapshots completos a cada heartbeat.
       pcall(omsi.lan.send, 1, omsi.json.encode({ v = 1, k = "roster_request" }))
     end
+  else
+    roster_request_elapsed = 0
   end
 end)
 
