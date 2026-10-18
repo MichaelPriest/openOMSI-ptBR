@@ -69,6 +69,16 @@ local function install_fallbacks()
   if type(omsi.lan.send) ~= "function" then
     omsi.lan.send = function() return false, "Esta versão não oferece transporte multiplayer para plugins" end
   end
+  -- Multiplayer só fica ativo quando sessão, envio e JSON existem juntos.
+  -- Uma API parcial não pode fazer o plugin entrar por engano em caminhos de rede.
+  local lan_complete = has("lan.active") and has("lan.me") and has("lan.players")
+    and has("lan.send") and has("json.encode") and has("json.decode")
+  if not lan_complete then
+    omsi.lan.active = function() return false end
+    omsi.lan.me = function() return 0, "Motorista local", false end
+    omsi.lan.players = function() return {} end
+    omsi.lan.send = function() return false, "Multiplayer indisponível nesta versão" end
+  end
 
   -- Se a versão não tem painel de configurações do plugin, manter os valores
   -- padrão permite carreira local sem interromper o carregamento.
