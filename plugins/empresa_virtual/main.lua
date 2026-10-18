@@ -1,4 +1,8 @@
 -- Empresa Virtual openOMSI: agente de operações por regras configuráveis.
+-- Camada de compatibilidade: falha de forma explícita se faltarem APIs essenciais.
+local compat = require("compat")
+if not compat.startup() then return end
+
 -- API de referência: openOMSI v0.3.37 docs/PLUGINS.md e docs/plugin-api.json.
 local settings = omsi.plugin.settings({
   { key = "enabled", type = "bool", label = "Ativar Empresa Virtual", default = true },
