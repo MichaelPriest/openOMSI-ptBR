@@ -142,13 +142,13 @@ assert(toasts[#toasts]:find("DriverOps", 1, true) and toasts[#toasts]:find("Term
 
 -- Public plugin API fallback: menu and actions must work through documented key events.
 local toast_count_before_menu = #toasts
-emit("key", "F2", true)
+emit("key", "F12", true)
 assert(#toasts == toast_count_before_menu + 1 and toasts[#toasts]:find("EMPRESA VIRTUAL", 1, true),
-  "F2 must open a usable keyboard menu when custom UI click support is absent")
+  "F12 must open a usable keyboard menu when custom UI click support is absent")
 emit("key", "1", true)
 assert(toasts[#toasts]:find("CARREIRA", 1, true) and toasts[#toasts]:find("XP:", 1, true),
   "menu option 1 must show the real career summary")
-emit("key", "F2", true)
+emit("key", "F12", true)
 local toast_start_driverops = #toasts
 emit("key", "4", true)
 local driverops_menu_report = table.concat(toasts, "\\n", toast_start_driverops + 1)
