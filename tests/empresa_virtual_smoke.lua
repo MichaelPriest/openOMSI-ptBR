@@ -140,6 +140,19 @@ hotkeys.F10()
 assert(toasts[#toasts]:find("DriverOps", 1, true) and toasts[#toasts]:find("Terminal", 1, true),
   "quick DriverOps status must include live stop information")
 
+-- Public plugin API fallback: menu and actions must work through documented key events.
+local toast_count_before_menu = #toasts
+emit("key", "F2", true)
+assert(#toasts == toast_count_before_menu + 1 and toasts[#toasts]:find("EMPRESA VIRTUAL", 1, true),
+  "F2 must open a usable keyboard menu when custom UI click support is absent")
+emit("key", "1", true)
+assert(toasts[#toasts]:find("CARREIRA", 1, true) and toasts[#toasts]:find("XP:", 1, true),
+  "menu option 1 must show the real career summary")
+emit("key", "F2", true)
+emit("key", "4", true)
+assert(toasts[#toasts]:find("DRIVEROPS", 1, true),
+  "menu option 4 must launch DriverOps without requiring an unsupported clickable panel")
+
 -- Required UI/log fallbacks should not report multiplayer in offline mode.
 local compat = require("compat")
 assert(compat.mode == "solo-offline", "missing LAN APIs must remain offline")
