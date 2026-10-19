@@ -841,11 +841,63 @@ omsi.on("ui_click", function(panel, element)
   end
 end)
 
--- Compatibilidade: em builds antigas sem hotkey chords, não tomamos teclas F*
--- conhecidas como livres. As ações ficam disponíveis pelo painel clicável.
+-- O plugin API pública do openOMSI ainda não oferece painéis customizados
+-- nem evento ui_click em todas as versões. Não deixamos os comandos presos a
+-- botões que o runtime pode desenhar, mas não consegue acionar: F2 abre um menu
+-- acessível por teclado, usando somente eventos "key" documentados.
+local fallback_menu_open = false
+local function show_fallback_menu()
+  fallback_menu_open = true
+  toast("EMPRESA VIRTUAL — pressione 1 Carreira, 2 Motoristas, 3 Despachar, 4 DriverOps, 5 Status, 6 Salvar, 7 Configurar ou 0 Fechar.", 12)
+end
+
+local function fallback_menu_action(key)
+  if key == "0" or key == "Digit0" or key == "Numpad0" then
+    fallback_menu_open = false
+    toast("Menu Empresa Virtual fechado.", 3)
+  elseif key == "1" or key == "Digit1" or key == "Numpad1" then
+    fallback_menu_open = false
+    toast(string.format("CARREIRA — %s | Cargo: %s | XP: %d | Nota: %d | Paradas: %d",
+      tostring(career.rank), driver_role, math.floor(career.xp), math.floor(career.score), career.completed_stops), 8)
+  elseif key == "2" or key == "Digit2" or key == "Numpad2" then
+    fallback_menu_open = false
+    local count = 0
+    for _ in pairs(company_roster) do count = count + 1 end
+    toast("MOTORISTAS — " .. tostring(count) .. " perfil(is) salvo(s). Para detalhes da sessão, use o painel nativo se disponível.", 7)
+  elseif key == "3" or key == "Digit3" or key == "Numpad3" then
+    fallback_menu_open = false
+    dispatch_default_duty()
+  elseif key == "4" or key == "Digit4" or key == "Numpad4" then
+    fallback_menu_open = false
+    show_driverops()
+  elseif key == "5" or key == "Digit5" or key == "Numpad5" then
+    fallback_menu_open = false
+    show_status()
+  elseif key == "6" or key == "Digit6" or key == "Numpad6" then
+    fallback_menu_open = false
+    save_records()
+  elseif key == "7" or key == "Digit7" or key == "Numpad7" then
+    fallback_menu_open = false
+    if type(omsi.plugin.show_settings) == "function" then
+      omsi.plugin.show_settings(true)
+    else
+      toast("Configurações visuais não são suportadas por esta versão do runtime. Os atalhos podem ser alterados no arquivo Lua.", 8)
+    end
+  end
+end
+
 omsi.on("key", function(key, down)
-  if not down or not enabled or native_hotkeys then return end
-  if key == "F10" and type(omsi.ui.focus) == "function" then
+  if not down or not enabled then return end
+  if key == "F2" and not (type(omsi.ui.typing) == "function" and omsi.ui.typing()) then
+    show_fallback_menu()
+    return
+  end
+  if fallback_menu_open then
+    fallback_menu_action(key)
+    return
+  end
+  if not native_hotkeys and key == "F10" and type(omsi.ui.focus) == "function"
+    and type(omsi.ui.focused) == "function" then
     omsi.ui.focus(not omsi.ui.focused())
   end
 end)
