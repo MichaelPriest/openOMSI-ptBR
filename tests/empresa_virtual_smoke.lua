@@ -1,6 +1,6 @@
 -- Smoke/regression tests for Empresa Virtual (Lua 5.4).
 -- Run from the repository root: lua5.4 tests/empresa_virtual_smoke.lua
-local callbacks, timers, logs, hotkeys, toasts = {}, {}, {}, {}, {}
+local callbacks, timers, logs, hotkeys, toasts, ui_panels = {}, {}, {}, {}, {}, {}
 local data = {}
 local duty_start_calls = 0
 
@@ -31,7 +31,7 @@ omsi = {
     end,
   },
   ui = {
-    set = function() return true end,
+    set = function(name, panel) ui_panels[name] = panel; return true end,
     toast = function(message) table.insert(toasts, tostring(message)); return true end,
   },
   duty = {
@@ -77,9 +77,22 @@ assert(data.empresa_virtual_career ~= nil, "career must persist locally at start
 assert(data.empresa_virtual_career.rank == "Aprendiz",
   "promotion thresholds must be monotonic even when settings are misconfigured")
 
--- The host must not start a second duty when one is already active.
-emit("ui_click", "empresa_virtual_dashboard", "ev_dispatch")
+-- The operational screen opens first; its action must still refuse a second active duty.
+emit("ui_click", "empresa_virtual_dashboard", "ev_open_dispatch")
+assert(ui_panels.empresa_virtual_function_page and ui_panels.empresa_virtual_function_page.visible == true,
+  "opening dispatch must show a dedicated function screen")
+emit("ui_click", "empresa_virtual_function_page", "ev_page_dispatch")
 assert(duty_start_calls == 0, "dispatch must refuse when the driver already has an active duty")
+emit("ui_click", "empresa_virtual_function_page", "ev_page_back")
+assert(ui_panels.empresa_virtual_dashboard ~= nil, "back action must return to the dashboard")
+emit("ui_click", "empresa_virtual_dashboard", "ev_open_driverops")
+assert(ui_panels.empresa_virtual_function_page and ui_panels.empresa_virtual_function_page.visible == true,
+  "DriverOps must open a dedicated on-screen report instead of only a toast")
+local driverops_text = {}
+for _, item in ipairs(ui_panels.empresa_virtual_function_page.children or {}) do
+  if item.text then driverops_text[#driverops_text + 1] = item.text end
+end
+assert(table.concat(driverops_text, " "):find("Próxima parada", 1, true), "DriverOps screen must show the current next stop")
 
 -- The old and new duty event names must not create two career records.
 emit("duty", "136", "3")
