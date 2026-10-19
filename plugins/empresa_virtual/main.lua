@@ -733,13 +733,13 @@ render_dashboard = function()
       { type = "row", children = {
         { type = "button", id = "ev_open_career", text = "Carreira" },
         { type = "button", id = "ev_open_roster", text = "Motoristas" },
-        { type = "button", id = "ev_dispatch", text = "Despachar" },
-        { type = "button", id = "ev_driverops", text = "DriverOps" },
+        { type = "button", id = "ev_open_dispatch", text = "Viagens" },
+        { type = "button", id = "ev_open_driverops", text = "DriverOps" },
       } },
       { type = "row", children = {
-        { type = "button", id = "ev_status", text = "Status" },
+        { type = "button", id = "ev_open_status", text = "Status" },
         { type = "button", id = "ev_save", text = "Salvar" },
-        { type = "button", id = "ev_settings", text = "Configurar" },
+        { type = "button", id = "ev_open_settings", text = "Configurar" },
       } },
       { type = "text", text = "Atalhos: " .. tostring(cfg("hotkey_roster", "Ctrl+Shift+M")) .. " • " .. tostring(cfg("hotkey_dispatch", "F5")), size = 9, color = "#9CA3AF" },
     },
@@ -808,6 +808,34 @@ configure_hotkeys = function()
 end
 
 omsi.on("ui_click", function(panel, element)
+  if panel == "empresa_virtual_function_page" then
+    if element == "ev_page_back" then
+      omsi.ui.set("empresa_virtual_function_page", { visible = false })
+      render_dashboard()
+    elseif element == "ev_page_close" then
+      omsi.ui.set("empresa_virtual_function_page", { visible = false })
+      omsi.ui.set("empresa_virtual_dashboard", { visible = false })
+    elseif element == "ev_page_refresh" then
+      local st = snapshot()
+      local title = function_page == "driverops" and "DRIVEROPS • RELATÓRIO" or "STATUS DA OPERAÇÃO"
+      local details = {
+        { type = "text", text = st.player .. " • " .. driver_role, weight = "bold" },
+        { type = "text", text = "Mapa: " .. tostring(st.map ~= "" and st.map or "não identificado") },
+        { type = "text", text = "Linha " .. st.line .. " • Viagem " .. st.trip .. " • Próxima parada: " .. st.next_stop },
+        { type = "text", text = string.format("Velocidade %.0f km/h • Limite %s • Atraso %ds • Passageiros %d", st.speed, st.speed_limit > 0 and string.format("%.0f km/h", st.speed_limit) or "não informado", math.floor(st.delay), st.passengers) },
+        { type = "text", text = "Pontuação " .. tostring(math.floor(career.score)) .. "/100 • XP " .. tostring(math.floor(career.xp)) .. " • " .. tostring(career.rank) },
+        { type = "row", children = { { type = "button", id = "ev_page_refresh", text = "Atualizar" }, { type = "button", id = "ev_page_back", text = "Voltar ao painel" }, { type = "button", id = "ev_page_close", text = "Fechar" } } },
+      }
+      omsi.ui.set("empresa_virtual_function_page", { anchor = "center", width = 430, padding = 18, gap = 10, background = "#111827F5", radius = 16, accent = "#3B82F6", visible = true, draggable = true, grab = true, children = { { type = "text", text = title, size = 15, weight = "bold" }, { type = "divider" }, table.unpack(details) } })
+    elseif element == "ev_page_dispatch" then
+      dispatch_default_duty()
+      omsi.ui.set("empresa_virtual_function_page", { visible = false })
+      render_dashboard()
+    elseif element == "ev_page_native_settings" then
+      if type(omsi.plugin.show_settings) == "function" then omsi.plugin.show_settings(true) else toast("Esta versão não oferece opções nativas do plugin.", 6) end
+    end
+    return
+  end
   if panel == "empresa_virtual_dashboard" then
     if element == "ev_open_career" then
       career_visible = not career_visible
@@ -817,14 +845,37 @@ omsi.on("ui_click", function(panel, element)
       roster_visible = not roster_visible
       render_roster()
       render_dashboard()
-    elseif element == "ev_dispatch" then
-      dispatch_default_duty()
-    elseif element == "ev_driverops" then
-      show_driverops()
-    elseif element == "ev_status" then
-      show_status()
+    elseif element == "ev_open_dispatch" then
+      function_page = "dispatch"
+      local duty = omsi.duty.get() or {}
+      local children = {
+        { type = "text", text = "DESPACHO DE VIAGENS", size = 15, weight = "bold" },
+        { type = "text", text = "Linha configurada: " .. tostring(cfg("dispatch_line", "136")) },
+        { type = "text", text = "Viagem configurada: " .. tostring(cfg("dispatch_tour", "3")) },
+        { type = "text", text = (duty.line ~= nil or duty.tour ~= nil or duty.trip ~= nil) and ("Escala ativa: " .. tostring(duty.line or "—") .. " / " .. tostring(duty.tour or duty.trip or "—")) or "Nenhuma escala ativa." },
+        { type = "row", children = { { type = "button", id = "ev_page_dispatch", text = "Iniciar viagem" }, { type = "button", id = "ev_page_back", text = "Voltar ao painel" }, { type = "button", id = "ev_page_close", text = "Fechar" } } },
+      }
+      omsi.ui.set("empresa_virtual_function_page", { anchor = "center", width = 430, padding = 18, gap = 10, background = "#111827F5", radius = 16, accent = "#3B82F6", visible = true, draggable = true, grab = true, children = children })
+    elseif element == "ev_open_driverops" or element == "ev_open_status" then
+      function_page = element == "ev_open_driverops" and "driverops" or "status"
+      local st = snapshot()
+      local title = function_page == "driverops" and "DRIVEROPS • RELATÓRIO" or "STATUS DA OPERAÇÃO"
+      local children = {
+        { type = "text", text = title, size = 15, weight = "bold" },
+        { type = "text", text = st.player .. " • " .. driver_role, weight = "bold" },
+        { type = "text", text = "Mapa: " .. tostring(st.map ~= "" and st.map or "não identificado") },
+        { type = "text", text = "Linha " .. st.line .. " • Viagem " .. st.trip .. " • Próxima parada: " .. st.next_stop },
+        { type = "text", text = string.format("Velocidade %.0f km/h • Limite %s • Atraso %ds • Passageiros %d", st.speed, st.speed_limit > 0 and string.format("%.0f km/h", st.speed_limit) or "não informado", math.floor(st.delay), st.passengers) },
+        { type = "text", text = "Pontuação " .. tostring(math.floor(career.score)) .. "/100 • XP " .. tostring(math.floor(career.xp)) .. " • " .. tostring(career.rank) },
+        { type = "row", children = { { type = "button", id = "ev_page_refresh", text = "Atualizar" }, { type = "button", id = "ev_page_back", text = "Voltar ao painel" }, { type = "button", id = "ev_page_close", text = "Fechar" } } },
+      }
+      omsi.ui.set("empresa_virtual_function_page", { anchor = "center", width = 430, padding = 18, gap = 10, background = "#111827F5", radius = 16, accent = "#3B82F6", visible = true, draggable = true, grab = true, children = children })
     elseif element == "ev_save" then
       save_records()
+    elseif element == "ev_open_settings" then
+      function_page = "settings"
+      local children = { { type = "text", text = "CONFIGURAÇÕES DA EMPRESA VIRTUAL", size = 15, weight = "bold" }, { type = "text", text = "Empresa: " .. company_name }, { type = "text", text = "Cargo: " .. driver_role }, { type = "text", text = "Linha/viagem padrão: " .. tostring(cfg("dispatch_line", "136")) .. " / " .. tostring(cfg("dispatch_tour", "3")) }, { type = "text", text = "As regras completas dependem do painel nativo de configurações do runtime." }, { type = "row", children = { { type = "button", id = "ev_page_native_settings", text = "Opções do plugin" }, { type = "button", id = "ev_page_back", text = "Voltar ao painel" }, { type = "button", id = "ev_page_close", text = "Fechar" } } } }
+      omsi.ui.set("empresa_virtual_function_page", { anchor = "center", width = 430, padding = 18, gap = 10, background = "#111827F5", radius = 16, accent = "#3B82F6", visible = true, draggable = true, grab = true, children = children })
     elseif element == "ev_settings" then
       if type(omsi.plugin.show_settings) == "function" then
         omsi.plugin.show_settings(true)
