@@ -149,8 +149,10 @@ emit("key", "1", true)
 assert(toasts[#toasts]:find("CARREIRA", 1, true) and toasts[#toasts]:find("XP:", 1, true),
   "menu option 1 must show the real career summary")
 emit("key", "F2", true)
+local toast_start_driverops = #toasts
 emit("key", "4", true)
-assert(toasts[#toasts]:find("DRIVEROPS", 1, true),
+local driverops_menu_report = table.concat(toasts, "\\n", toast_start_driverops + 1)
+assert(driverops_menu_report:find("DRIVEROPS", 1, true),
   "menu option 4 must launch DriverOps without requiring an unsupported clickable panel")
 
 -- Required UI/log fallbacks should not report multiplayer in offline mode.
