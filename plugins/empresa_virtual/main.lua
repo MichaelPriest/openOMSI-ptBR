@@ -35,7 +35,7 @@ local settings = omsi.plugin.settings({
   { key = "dispatch_minimum_score", type = "number", label = "Nota mínima para receber despacho", default = 50, min = 0, max = 100, step = 5 },
   { key = "auto_accept_dispatch", type = "bool", label = "Aceitar despacho do host automaticamente", default = true },
   { key = "host_authoritative", type = "bool", label = "Host é autoridade dos registros sincronizados", default = true },
-  { key = "hotkey_roster", type = "text", label = "Atalho do painel de motoristas", default = "F4" },
+  { key = "hotkey_roster", type = "text", label = "Atalho do painel de motoristas", default = "Ctrl+Shift+M" },
   { key = "hotkey_dispatch", type = "text", label = "Atalho para despacho", default = "F5" },
   { key = "hotkey_status", type = "text", label = "Atalho para status", default = "F7" },
   { key = "hotkey_save", type = "text", label = "Atalho para salvar registros", default = "F6" },
@@ -741,7 +741,7 @@ render_dashboard = function()
         { type = "button", id = "ev_save", text = "Salvar" },
         { type = "button", id = "ev_settings", text = "Configurar" },
       } },
-      { type = "text", text = "Atalhos: " .. tostring(cfg("hotkey_roster", "F4")) .. " • " .. tostring(cfg("hotkey_dispatch", "F5")), size = 9, color = "#9CA3AF" },
+      { type = "text", text = "Atalhos: " .. tostring(cfg("hotkey_roster", "Ctrl+Shift+M")) .. " • " .. tostring(cfg("hotkey_dispatch", "F5")), size = 9, color = "#9CA3AF" },
     },
   }
   local ok, why = omsi.ui.set("empresa_virtual_dashboard", panel)
@@ -765,7 +765,7 @@ configure_hotkeys = function()
     if ok and type(result) == "table" then bindings = result end
   end
   local actions = {
-    { key = "hotkey_roster", fallback = "F4", label = "motoristas", run = function() roster_visible = not roster_visible; render_roster(); render_dashboard() end },
+    { key = "hotkey_roster", fallback = "Ctrl+Shift+M", label = "motoristas", run = function() roster_visible = not roster_visible; render_roster(); render_dashboard() end },
     { key = "hotkey_dispatch", fallback = "F5", label = "despacho", run = dispatch_default_duty },
     { key = "hotkey_status", fallback = "F7", label = "status", run = show_status },
     { key = "hotkey_save", fallback = "F6", label = "salvar", run = save_records },
@@ -843,7 +843,7 @@ end)
 
 -- O plugin API pública do openOMSI ainda não oferece painéis customizados
 -- nem evento ui_click em todas as versões. Não deixamos os comandos presos a
--- botões que o runtime pode desenhar, mas não consegue acionar: F2 abre um menu
+-- botões que o runtime pode desenhar, mas não consegue acionar: F12 abre um menu
 -- acessível por teclado, usando somente eventos "key" documentados.
 local fallback_menu_open = false
 local function show_fallback_menu()
@@ -888,7 +888,7 @@ end
 
 omsi.on("key", function(key, down)
   if not down or not enabled then return end
-  if key == "F2" and not (type(omsi.ui.typing) == "function" and omsi.ui.typing()) then
+  if key == "F12" and not (type(omsi.ui.typing) == "function" and omsi.ui.typing()) then
     show_fallback_menu()
     return
   end
